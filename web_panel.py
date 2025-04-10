@@ -10,7 +10,7 @@ from flask import Flask, request, render_template_string, redirect, url_for, sen
 from functools import wraps
 from werkzeug.utils import secure_filename
 
-# Ustawienie katalogu tymczasowego – aby ominąć problemy przy przesyłaniu dużych plików
+# Set up a custom temporary directory to avoid issues with large file uploads
 TEMP_DIR = '/home/pi/tmp'
 if not os.path.exists(TEMP_DIR):
     os.makedirs(TEMP_DIR, mode=0o1777)
@@ -18,14 +18,14 @@ os.environ['TMPDIR'] = TEMP_DIR
 tempfile.tempdir = TEMP_DIR
 
 app = Flask(__name__)
-app.secret_key = 'twoj_sekretny_klucz'  # Zamień na własny, trudny ciąg
+app.secret_key = 'your_secret_key'  # Change to your own secret key
 
-# Konfiguracja autoryzacji i głównego katalogu
+# Authorization settings and base directory
 USERNAME = 'admin'
 PASSWORD = 'mawerik1'
 BASE_DIR = os.path.abspath("/home/pi/RetroPie")
 
-# ------------------ Filtry Jinja2 ------------------ #
+# ------------------ Jinja2 Filters ------------------ #
 def format_datetime(value):
     return datetime.fromtimestamp(value).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -41,13 +41,13 @@ def format_filesize(value):
 app.jinja_env.filters['datetimeformat'] = format_datetime
 app.jinja_env.filters['filesizeformat'] = format_filesize
 
-# ------------------ Funkcje autoryzacyjne ------------------ #
+# ------------------ Authentication Functions ------------------ #
 def check_auth(username, password):
     return username == USERNAME and password == PASSWORD
 
 def authenticate():
     return Response(
-        'Brak dostępu. Zaloguj się poprawnymi danymi.\n', 401,
+        'Access denied. Please log in with the correct credentials.\n', 401,
         {'WWW-Authenticate': 'Basic realm="Login Required"'}
     )
 
@@ -66,7 +66,7 @@ def safe_path(path):
         abort(403)
     return abs_path
 
-# ------------------ Funkcje pomocnicze ------------------ #
+# ------------------ Helper Functions ------------------ #
 def round_1(x):
     return round(x, 1)
 
@@ -95,7 +95,7 @@ def get_ssd_temperatures():
                 parts = line.split(":")
                 if len(parts) >= 2:
                     sensor_name = parts[0].strip()
-                    temp_str = parts[1].strip()   # np. "28 C (301 K)"
+                    temp_str = parts[1].strip()  # e.g., "28 C (301 K)"
                     tokens = temp_str.split()
                     if tokens:
                         raw_val = tokens[0].lower().replace("°c", "").replace("c", "").strip()
@@ -142,7 +142,7 @@ def get_monitoring_data(selected_sensor=None):
         'ssd_temp': ssd_selected_temp
     }
 
-# ------------------ Endpoint API dla monitoringu ------------------ #
+# ------------------ Monitoring API Endpoint ------------------ #
 @app.route('/api/monitoring')
 @requires_auth
 def api_monitoring():
@@ -162,47 +162,47 @@ def api_monitoring():
     }
     return jsonify(response)
 
-# ------------------ Endpoint do edycji plików wewnątrz BASE_DIR ------------------ #
+# ------------------ File Editing Endpoint (within BASE_DIR) ------------------ #
 @app.route('/edit/<path:req_path>', methods=['GET', 'POST'])
 @requires_auth
 def edit_file(req_path):
     abs_path = safe_path(req_path)
     if not os.path.isfile(abs_path):
-        flash("Wybrany element nie jest plikiem.")
+        flash("The selected item is not a file.")
         return redirect(url_for('dir_listing', req_path=posixpath.dirname(req_path)))
     if request.method == 'POST':
         new_content = request.form.get('content', '')
         try:
             with open(abs_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
-            flash("Plik został zaktualizowany.")
+            flash("File has been updated.")
             return redirect(url_for('dir_listing', req_path=posixpath.dirname(req_path)))
         except Exception as e:
-            flash(f"Błąd podczas zapisywania pliku: {e}")
+            flash(f"Error saving the file: {e}")
     else:
         try:
             with open(abs_path, 'r', encoding='utf-8') as f:
                 content = f.read()
         except Exception as e:
-            flash(f"Błąd podczas odczytu pliku: {e}")
+            flash(f"Error reading the file: {e}")
             return redirect(url_for('dir_listing', req_path=posixpath.dirname(req_path)))
         edit_template = """
         <!doctype html>
-        <html lang="pl">
+        <html lang="en">
         <head>
           <meta charset="utf-8">
-          <title>Edycja pliku</title>
+          <title>Edit File</title>
           <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
         </head>
         <body>
           <div class="container py-4">
-            <h1>Edycja pliku: {{ filename }}</h1>
+            <h1>Edit file: {{ filename }}</h1>
             <form method="post">
               <div class="mb-3">
                 <textarea name="content" class="form-control" rows="20">{{ content }}</textarea>
               </div>
-              <button type="submit" class="btn btn-primary">Zapisz zmiany</button>
-              <a href="{{ url_for('dir_listing', req_path=parent_path) }}" class="btn btn-secondary">Anuluj</a>
+              <button type="submit" class="btn btn-primary">Save Changes</button>
+              <a href="{{ url_for('dir_listing', req_path=parent_path) }}" class="btn btn-secondary">Cancel</a>
             </form>
           </div>
           <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
@@ -212,7 +212,7 @@ def edit_file(req_path):
         return render_template_string(edit_template, filename=os.path.basename(abs_path),
                                       content=content, parent_path=posixpath.dirname(req_path))
 
-# ------------------ Endpoint do edycji pliku /boot/firmware/config.txt ------------------ #
+# ------------------ Endpoint for Editing /boot/firmware/config.txt ------------------ #
 @app.route('/edit_config', methods=['GET', 'POST'])
 @requires_auth
 def edit_config():
@@ -222,33 +222,33 @@ def edit_config():
         try:
             with open(config_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
-            flash("Plik config.txt został zaktualizowany.")
+            flash("config.txt has been updated.")
             return redirect(url_for('dir_listing', req_path=''))
         except Exception as e:
-            flash(f"Błąd podczas zapisywania config.txt: {e}")
+            flash(f"Error saving config.txt: {e}")
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             content = f.read()
     except Exception as e:
-        flash(f"Błąd podczas odczytu config.txt: {e}")
+        flash(f"Error reading config.txt: {e}")
         return redirect(url_for('dir_listing', req_path=''))
     edit_template = """
     <!doctype html>
-    <html lang="pl">
+    <html lang="en">
     <head>
       <meta charset="utf-8">
-      <title>Edycja config.txt</title>
+      <title>Edit config.txt</title>
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
     </head>
     <body>
       <div class="container py-4">
-        <h1>Edycja pliku: config.txt</h1>
+        <h1>Edit file: config.txt</h1>
         <form method="post">
           <div class="mb-3">
             <textarea name="content" class="form-control" rows="20">{{ content }}</textarea>
           </div>
-          <button type="submit" class="btn btn-primary">Zapisz zmiany</button>
-          <a href="{{ url_for('dir_listing', req_path='') }}" class="btn btn-secondary">Anuluj</a>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+          <a href="{{ url_for('dir_listing', req_path='') }}" class="btn btn-secondary">Cancel</a>
         </form>
       </div>
       <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
@@ -257,7 +257,7 @@ def edit_config():
     """
     return render_template_string(edit_template, content=content)
 
-# ------------------ Endpoint do bulk usuwania ------------------ #
+# ------------------ Bulk Delete Endpoint ------------------ #
 @app.route('/delete_bulk', methods=['POST'])
 @requires_auth
 def delete_bulk():
@@ -270,95 +270,19 @@ def delete_bulk():
             elif os.path.isfile(abs_path):
                 os.remove(abs_path)
         except Exception as e:
-            flash(f"Błąd podczas usuwania {file_rel}: {e}")
-    flash("Wybrane elementy zostały usunięte.")
+            flash(f"Error deleting {file_rel}: {e}")
+    flash("Selected items have been deleted.")
     parent = posixpath.dirname(selected[0]) if selected else ''
     return redirect(url_for('dir_listing', req_path=parent))
 
-# ------------------ Endpoint do przesyłania plików (manualny zapis w blokach) ------------------ #
-@app.route('/upload/<path:req_path>', methods=['POST'])
-@requires_auth
-def upload_file(req_path):
-    abs_dir = safe_path(req_path)
-    if 'file' not in request.files:
-        flash("Nie wybrano pliku.")
-        return redirect(url_for('dir_listing', req_path=req_path))
-    uploaded_files = request.files.getlist('file')
-    for file in uploaded_files:
-        if file.filename == '':
-            flash("Jeden z przesłanych plików nie ma nazwy.")
-            continue
-        filename = secure_filename(file.filename)
-        save_path = os.path.join(abs_dir, filename)
-        try:
-            with open(save_path, 'wb') as f:
-                while True:
-                    chunk = file.stream.read(8192)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-            flash(f"Plik '{filename}' przesłany pomyślnie.")
-        except Exception as e:
-            flash(f"Błąd przy zapisie pliku '{filename}': {e}")
-    return redirect(url_for('dir_listing', req_path=req_path))
-
-# ------------------ Endpoint do usuwania plików ------------------ #
-@app.route('/delete/<path:req_path>')
-@requires_auth
-def delete_file(req_path):
-    abs_path = safe_path(req_path)
-    if not os.path.isfile(abs_path):
-        flash("Wybrany element nie jest plikiem lub nie istnieje.")
-    else:
-        try:
-            os.remove(abs_path)
-            flash("Plik został usunięty.")
-        except Exception as e:
-            flash(f"Błąd podczas usuwania pliku: {e}")
-    parent = posixpath.dirname(req_path)
-    return redirect(url_for('dir_listing', req_path=parent))
-
-# ------------------ Endpoint do usuwania katalogów ------------------ #
-@app.route('/delete_folder/<path:req_path>')
-@requires_auth
-def delete_folder(req_path):
-    abs_path = safe_path(req_path)
-    if not os.path.isdir(abs_path):
-        flash("Wybrany element nie jest katalogiem lub nie istnieje.")
-    else:
-        try:
-            shutil.rmtree(abs_path)
-            flash("Katalog został usunięty.")
-        except Exception as e:
-            flash(f"Błąd podczas usuwania katalogu: {e}")
-    parent = posixpath.dirname(req_path)
-    return redirect(url_for('dir_listing', req_path=parent))
-
-# ------------------ Endpoint do tworzenia katalogów ------------------ #
-@app.route('/create_folder/<path:req_path>', methods=['POST'])
-@requires_auth
-def create_folder(req_path):
-    abs_path = safe_path(req_path)
-    folder_name = request.form.get('folder_name', '').strip()
-    if folder_name == '':
-        flash("Nazwa katalogu jest pusta.")
-        return redirect(url_for('dir_listing', req_path=req_path))
-    new_dir = os.path.join(abs_path, secure_filename(folder_name))
-    try:
-        os.makedirs(new_dir)
-        flash("Katalog utworzony pomyślnie.")
-    except Exception as e:
-        flash(f"Błąd przy tworzeniu katalogu: {e}")
-    return redirect(url_for('dir_listing', req_path=req_path))
-
-# ------------------ Główna strona – lista plików, monitoring i bulk ------------------ #
+# ------------------ Main Page – Listing Files and Monitoring ------------------ #
 @app.route('/', defaults={'req_path': ''})
 @app.route('/<path:req_path>')
 @requires_auth
 def dir_listing(req_path):
     abs_path = safe_path(req_path)
     if not os.path.exists(abs_path):
-        return f'Katalog lub plik nie istnieje: {req_path}', 404
+        return f"Directory or file does not exist: {req_path}", 404
     if os.path.isfile(abs_path):
         return send_from_directory(os.path.dirname(abs_path), os.path.basename(abs_path), as_attachment=True)
     selected_sensor = request.args.get('ssd_sensor', None)
@@ -378,7 +302,7 @@ def dir_listing(req_path):
             }
             files.append(file_info)
     except PermissionError:
-        flash("Brak uprawnień do odczytu zawartości katalogu.")
+        flash("Insufficient permissions to read directory contents.")
         files = []
     sort_by = request.args.get('sort', 'name')
     order = request.args.get('order', 'asc')
@@ -392,27 +316,26 @@ def dir_listing(req_path):
     else:
         files.sort(key=lambda x: x['name'].lower(), reverse=reverse_order)
     parent_path = posixpath.dirname(req_path)
-    # Szablon HTML – Monitoring z paskami postępu, formularz uploadu+utwórz katalog nad listą, bulk selection.
     html_template = """
     <!doctype html>
-    <html lang="pl">
+    <html lang="en">
     <head>
       <meta charset="utf-8">
-      <title>Lekki Panel Zarządzania Grami</title>
+      <title>Light Web Game Manager Panel</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
       <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
       <style>
-         /* Opcjonalnie ogranicz rozmiar elementów, jeżeli potrzeba */
-         .progress { height: 25px; }
+         canvas { max-width: 300px; max-height: 300px; }
+         .progress-bar { color: black; } /* Set progress bar text color to black */
       </style>
     </head>
     <body>
       <div class="container py-4">
-        <h1 class="mb-4">Panel Zarządzania Plikami</h1>
+        <h1 class="mb-4">File Manager Panel</h1>
         <div class="text-end mb-3">
           <a href="{{ url_for('edit_config') }}" class="btn btn-outline-warning">
-            <i class="fas fa-edit"></i> Edytuj config.txt
+            <i class="fas fa-edit"></i> Edit config.txt
           </a>
         </div>
         {% with messages = get_flashed_messages() %}
@@ -423,7 +346,7 @@ def dir_listing(req_path):
           {% endif %}
         {% endwith %}
         
-        <!-- Sekcja Monitoring z paskami postępu -->
+        <!-- Monitoring Section with Progress Bars -->
         <div class="card mb-4">
           <div class="card-header">
             <h3>Monitoring</h3>
@@ -431,11 +354,11 @@ def dir_listing(req_path):
           <div class="card-body">
             <div class="row mb-3">
               <div class="col-md-3">
-                <strong>Temperatura CPU:</strong>
+                <strong>CPU Temp:</strong>
                 <span id="cpu-temp">{{ monitoring_info.cpu_temp }}</span>
               </div>
               <div class="col-md-3">
-                <strong>Temperatura SSD:</strong>
+                <strong>SSD Temp:</strong>
                 <span id="ssd-temp">{{ monitoring_info.ssd_temp }}</span>
                 {% if monitoring_info.ssd_selected_name %}
                   <br><small>{{ monitoring_info.ssd_selected_name }}</small>
@@ -444,7 +367,7 @@ def dir_listing(req_path):
               <div class="col-md-6">
                 {% if monitoring_info.ssd_all %}
                   <form method="get" class="d-flex align-items-center">
-                    <label for="ssd_sensor_select" class="me-2"><small>Wybierz czujnik SSD:</small></label>
+                    <label for="ssd_sensor_select" class="me-2"><small>Select SSD Sensor:</small></label>
                     <input type="hidden" name="req_path" value="{{ req_path }}">
                     <select name="ssd_sensor" id="ssd_sensor_select" class="form-select" style="width:auto;" onchange="this.form.submit()">
                       {% for sensor, temp in monitoring_info.ssd_all.items() %}
@@ -459,19 +382,19 @@ def dir_listing(req_path):
             </div>
             <div class="row mb-3">
               <div class="col-md-4">
-                <div class="mb-1"><strong>CPU:</strong></div>
+                <div class="mb-1"><strong>CPU Usage:</strong></div>
                 <div class="progress">
                   <div id="cpuBar" class="progress-bar" role="progressbar" style="width: {{ monitoring_info.cpu_usage }}%;" aria-valuenow="{{ monitoring_info.cpu_usage }}" aria-valuemin="0" aria-valuemax="100">{{ monitoring_info.cpu_usage }}%</div>
                 </div>
               </div>
               <div class="col-md-4">
-                <div class="mb-1"><strong>Pamięć:</strong></div>
+                <div class="mb-1"><strong>Memory Usage:</strong></div>
                 <div class="progress">
                   <div id="memBar" class="progress-bar bg-success" role="progressbar" style="width: {{ monitoring_info.mem_percent }}%;" aria-valuenow="{{ monitoring_info.mem_percent }}" aria-valuemin="0" aria-valuemax="100">{{ monitoring_info.mem_percent }}%</div>
                 </div>
               </div>
               <div class="col-md-4">
-                <div class="mb-1"><strong>Dysk:</strong> ({{ monitoring_info.disk_used | filesizeformat }} / {{ monitoring_info.disk_total | filesizeformat }})</div>
+                <div class="mb-1"><strong>Disk Usage:</strong> ({{ monitoring_info.disk_used | filesizeformat }} used / {{ monitoring_info.disk_total | filesizeformat }} total)</div>
                 <div class="progress">
                   <div id="diskBar" class="progress-bar bg-info" role="progressbar" style="width: {{ monitoring_info.disk_percent }}%;" aria-valuenow="{{ monitoring_info.disk_percent }}" aria-valuemin="0" aria-valuemax="100">{{ monitoring_info.disk_percent }}%</div>
                 </div>
@@ -480,10 +403,10 @@ def dir_listing(req_path):
           </div>
         </div>
         
-        <!-- Formularz uploadu plików oraz utwórz katalog -->
+        <!-- Upload and Create Folder Section -->
         <div class="card mb-4">
           <div class="card-header">
-            <h3>Prześlij plik(e) / Utwórz katalog</h3>
+            <h3>Upload Files / Create Folder</h3>
           </div>
           <div class="card-body">
             <div class="row">
@@ -492,7 +415,7 @@ def dir_listing(req_path):
                   <div class="mb-3">
                     <input type="file" name="file" class="form-control" multiple>
                   </div>
-                  <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Prześlij</button>
+                  <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Upload</button>
                 </form>
                 <div id="uploadProgress" class="progress mt-2" style="display:none;">
                   <div id="uploadProgressBar" class="progress-bar" role="progressbar" style="width: 0%;">0%</div>
@@ -501,30 +424,30 @@ def dir_listing(req_path):
               <div class="col-md-6">
                 <form action="{{ url_for('create_folder', req_path=req_path) }}" method="post">
                   <div class="mb-3">
-                    <input type="text" name="folder_name" placeholder="Nazwa katalogu" class="form-control">
+                    <input type="text" name="folder_name" placeholder="Folder Name" class="form-control">
                   </div>
-                  <button type="submit" class="btn btn-secondary"><i class="fas fa-folder-plus"></i> Utwórz katalog</button>
+                  <button type="submit" class="btn btn-secondary"><i class="fas fa-folder-plus"></i> Create Folder</button>
                 </form>
               </div>
             </div>
           </div>
         </div>
         
-        <!-- Bulk selection i lista plików/katalogów -->
+        <!-- Bulk Selection and File/Folder List -->
         <form method="post" action="{{ url_for('delete_bulk') }}">
           <div class="card">
             <div class="card-header">
-              <h3>Lista plików i folderów</h3>
+              <h3>File and Folder List</h3>
               <div class="mt-2">
-                <span>Sortuj wg: </span>
-                <a href="{{ url_for('dir_listing', req_path=req_path, sort='name', order='asc') }}" class="btn btn-sm btn-outline-primary">Nazwa ↑</a>
-                <a href="{{ url_for('dir_listing', req_path=req_path, sort='name', order='desc') }}" class="btn btn-sm btn-outline-primary">Nazwa ↓</a>
-                <a href="{{ url_for('dir_listing', req_path=req_path, sort='date', order='asc') }}" class="btn btn-sm btn-outline-secondary">Data ↑</a>
-                <a href="{{ url_for('dir_listing', req_path=req_path, sort='date', order='desc') }}" class="btn btn-sm btn-outline-secondary">Data ↓</a>
-                <a href="{{ url_for('dir_listing', req_path=req_path, sort='type', order='asc') }}" class="btn btn-sm btn-outline-info">Typ ↑</a>
-                <a href="{{ url_for('dir_listing', req_path=req_path, sort='type', order='desc') }}" class="btn btn-sm btn-outline-info">Typ ↓</a>
-                <a href="{{ url_for('dir_listing', req_path=req_path, sort='size', order='asc') }}" class="btn btn-sm btn-outline-dark">Rozmiar ↑</a>
-                <a href="{{ url_for('dir_listing', req_path=req_path, sort='size', order='desc') }}" class="btn btn-sm btn-outline-dark">Rozmiar ↓</a>
+                <span>Sort by: </span>
+                <a href="{{ url_for('dir_listing', req_path=req_path, sort='name', order='asc') }}" class="btn btn-sm btn-outline-primary">Name ↑</a>
+                <a href="{{ url_for('dir_listing', req_path=req_path, sort='name', order='desc') }}" class="btn btn-sm btn-outline-primary">Name ↓</a>
+                <a href="{{ url_for('dir_listing', req_path=req_path, sort='date', order='asc') }}" class="btn btn-sm btn-outline-secondary">Date ↑</a>
+                <a href="{{ url_for('dir_listing', req_path=req_path, sort='date', order='desc') }}" class="btn btn-sm btn-outline-secondary">Date ↓</a>
+                <a href="{{ url_for('dir_listing', req_path=req_path, sort='type', order='asc') }}" class="btn btn-sm btn-outline-info">Type ↑</a>
+                <a href="{{ url_for('dir_listing', req_path=req_path, sort='type', order='desc') }}" class="btn btn-sm btn-outline-info">Type ↓</a>
+                <a href="{{ url_for('dir_listing', req_path=req_path, sort='size', order='asc') }}" class="btn btn-sm btn-outline-dark">Size ↑</a>
+                <a href="{{ url_for('dir_listing', req_path=req_path, sort='size', order='desc') }}" class="btn btn-sm btn-outline-dark">Size ↓</a>
               </div>
             </div>
             <div class="card-body">
@@ -549,13 +472,13 @@ def dir_listing(req_path):
               <table class="table table-striped table-hover">
                 <thead>
                   <tr>
-                    <th>Zaznacz</th>
-                    <th>Ikona</th>
-                    <th>Nazwa</th>
-                    <th>Typ</th>
-                    <th>Data modyfikacji</th>
-                    <th>Rozmiar</th>
-                    <th>Akcje</th>
+                    <th>Select</th>
+                    <th>Icon</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Modified Date</th>
+                    <th>Size</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -592,26 +515,26 @@ def dir_listing(req_path):
                     <td class="align-middle">{{ file.size | filesizeformat }}</td>
                     <td class="align-middle">
                       {% if file.is_dir %}
-                        <a href="{{ url_for('dir_listing', req_path=file.path) }}" class="btn btn-sm btn-primary" title="Otwórz katalog"><i class="fas fa-folder-open"></i></a>
-                        <a href="{{ url_for('delete_folder', req_path=file.path) }}" class="btn btn-sm btn-danger" title="Usuń katalog" onclick="return confirm('Czy na pewno usunąć ten katalog (rekurencyjnie)?');"><i class="fas fa-trash-alt"></i></a>
+                        <a href="{{ url_for('dir_listing', req_path=file.path) }}" class="btn btn-sm btn-primary" title="Open Folder"><i class="fas fa-folder-open"></i></a>
+                        <a href="{{ url_for('delete_folder', req_path=file.path) }}" class="btn btn-sm btn-danger" title="Delete Folder" onclick="return confirm('Are you sure you want to delete this folder (recursively)?');"><i class="fas fa-trash-alt"></i></a>
                       {% else %}
-                        <a href="{{ url_for('dir_listing', req_path=file.path) }}" class="btn btn-sm btn-success" title="Pobierz plik"><i class="fas fa-download"></i></a>
-                        <a href="{{ url_for('edit_file', req_path=file.path) }}" class="btn btn-sm btn-warning" title="Edytuj plik"><i class="fas fa-edit"></i></a>
-                        <a href="{{ url_for('delete_file', req_path=file.path) }}" class="btn btn-sm btn-danger" title="Usuń plik" onclick="return confirm('Czy na pewno usunąć ten plik?');"><i class="fas fa-trash-alt"></i></a>
+                        <a href="{{ url_for('dir_listing', req_path=file.path) }}" class="btn btn-sm btn-success" title="Download File"><i class="fas fa-download"></i></a>
+                        <a href="{{ url_for('edit_file', req_path=file.path) }}" class="btn btn-sm btn-warning" title="Edit File"><i class="fas fa-edit"></i></a>
+                        <a href="{{ url_for('delete_file', req_path=file.path) }}" class="btn btn-sm btn-danger" title="Delete File" onclick="return confirm('Are you sure you want to delete this file?');"><i class="fas fa-trash-alt"></i></a>
                       {% endif %}
                     </td>
                   </tr>
                   {% endfor %}
                 </tbody>
               </table>
-              <button type="submit" class="btn btn-danger" onclick="return confirm('Czy na pewno usunąć wybrane elementy?');">Usuń zaznaczone</button>
+              <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete the selected items?');">Delete Selected</button>
             </div>
           </div>
         </form>
       </div>
-
+      
       <script>
-        // Funkcja aktualizująca paski postępu w sekcji monitoringu
+        // Update monitoring progress bars using plain Bootstrap progress bars
         function updateMonitoring() {
           let sensorSelect = document.getElementById("ssd_sensor_select");
           let sensorParam = "";
@@ -621,71 +544,30 @@ def dir_listing(req_path):
             .then(data => {
               document.getElementById("cpu-temp").textContent = data.cpu_temp;
               document.getElementById("ssd-temp").textContent = data.ssd_temp;
-              // Aktualizacja paska CPU
+              // Update CPU progress bar
               let cpuBar = document.getElementById("cpuBar");
               cpuBar.style.width = data.cpu_usage + "%";
               cpuBar.textContent = data.cpu_usage + "%";
-              // Aktualizacja paska pamięci
+              // Update Memory progress bar
               let memBar = document.getElementById("memBar");
               memBar.style.width = data.mem_percent + "%";
               memBar.textContent = data.mem_percent + "%";
-              // Aktualizacja paska dysku
+              // Update Disk progress bar
               let diskBar = document.getElementById("diskBar");
               diskBar.style.width = data.disk_percent + "%";
               diskBar.textContent = data.disk_percent + "%";
-              // Aktualizacja tekstowych elementów, jeżeli potrzeba
+              // Update additional text values
               document.getElementById("cpu-usage").textContent = data.cpu_usage;
               document.getElementById("disk-percent").textContent = data.disk_percent;
-              document.getElementById("mem-text").innerHTML = data.mem_percent + "% użycia (" + data.mem_used_human + " / " + data.mem_total_human + ")";
+              document.getElementById("mem-text").innerHTML = data.mem_percent + "% used (" + data.mem_used_human + " / " + data.mem_total_human + ")";
             })
-            .catch(err => console.error("Błąd pobierania /api/monitoring:", err));
+            .catch(err => console.error("Error fetching /api/monitoring:", err));
         }
         document.addEventListener("DOMContentLoaded", function() {
-          // Inicjalizacja pasków – zastąpienie wykresów
-          // Dynamically utwórz paski, jeżeli nie istnieją:
-          if(!document.getElementById("cpuBar")){
-            var cpuBar = document.createElement("div");
-            cpuBar.id = "cpuBar";
-            cpuBar.className = "progress-bar";
-            cpuBar.setAttribute("role", "progressbar");
-            cpuBar.style.width = "{{ monitoring_info.cpu_usage }}%";
-            cpuBar.textContent = "{{ monitoring_info.cpu_usage }}%";
-            var cpuProgress = document.createElement("div");
-            cpuProgress.className = "progress mb-3";
-            cpuProgress.appendChild(cpuBar);
-            // Dodaj CPU progress bar do kontenera monitoring (przed pozostalymi elementami)
-            var monitoringCard = document.querySelector(".card.mb-4 .card-body");
-            monitoringCard.insertBefore(cpuProgress, monitoringCard.firstChild);
-          }
-          if(!document.getElementById("memBar")){
-            var memBar = document.createElement("div");
-            memBar.id = "memBar";
-            memBar.className = "progress-bar bg-success";
-            memBar.setAttribute("role", "progressbar");
-            memBar.style.width = "{{ monitoring_info.mem_percent }}%";
-            memBar.textContent = "{{ monitoring_info.mem_percent }}%";
-            var memProgress = document.createElement("div");
-            memProgress.className = "progress mb-3";
-            memProgress.appendChild(memBar);
-            var monitoringCard = document.querySelector(".card.mb-4 .card-body");
-            monitoringCard.insertBefore(memProgress, monitoringCard.children[1]);
-          }
-          if(!document.getElementById("diskBar")){
-            var diskBar = document.createElement("div");
-            diskBar.id = "diskBar";
-            diskBar.className = "progress-bar bg-info";
-            diskBar.setAttribute("role", "progressbar");
-            diskBar.style.width = "{{ monitoring_info.disk_percent }}%";
-            diskBar.textContent = "{{ monitoring_info.disk_percent }}%";
-            var diskProgress = document.createElement("div");
-            diskProgress.className = "progress mb-3";
-            diskProgress.appendChild(diskBar);
-            var monitoringCard = document.querySelector(".card.mb-4 .card-body");
-            monitoringCard.insertBefore(diskProgress, monitoringCard.children[2]);
-          }
-          setInterval(updateMonitoring, 1000);
+          // Create progress bars if they don't exist (they are rendered in HTML)
+          setInterval(updateMonitoring, 500); // Refresh every 0.5 seconds
         });
-        // Obsługa uploadu z paskiem postępu
+        // Handle file upload with progress bar (AJAX)
         document.getElementById("uploadForm").addEventListener("submit", function(e) {
           e.preventDefault();
           var form = this;
@@ -704,7 +586,7 @@ def dir_listing(req_path):
             if (xhr.status === 200) {
               window.location.reload();
             } else {
-              alert("Błąd przy przesyłaniu pliku");
+              alert("Error uploading file.");
             }
           };
           xhr.send(formData);
@@ -716,6 +598,82 @@ def dir_listing(req_path):
     """
     return render_template_string(html_template, files=files, req_path=req_path,
                                   parent_path=parent_path, monitoring_info=monitoring_info)
+
+# ------------------ Endpoint for file uploads (manual saving in chunks) ------------------ #
+@app.route('/upload/<path:req_path>', methods=['POST'])
+@requires_auth
+def upload_file(req_path):
+    abs_dir = safe_path(req_path)
+    if 'file' not in request.files:
+        flash("No file selected.")
+        return redirect(url_for('dir_listing', req_path=req_path))
+    uploaded_files = request.files.getlist('file')
+    for file in uploaded_files:
+        if file.filename == '':
+            flash("One of the uploaded files has no name.")
+            continue
+        filename = secure_filename(file.filename)
+        save_path = os.path.join(abs_dir, filename)
+        try:
+            with open(save_path, 'wb') as f:
+                while True:
+                    chunk = file.stream.read(8192)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+            flash(f"File '{filename}' uploaded successfully.")
+        except Exception as e:
+            flash(f"Error saving file '{filename}': {e}")
+    return redirect(url_for('dir_listing', req_path=req_path))
+
+# ------------------ Endpoint for deleting files ------------------ #
+@app.route('/delete/<path:req_path>')
+@requires_auth
+def delete_file(req_path):
+    abs_path = safe_path(req_path)
+    if not os.path.isfile(abs_path):
+        flash("The selected item is not a file or does not exist.")
+    else:
+        try:
+            os.remove(abs_path)
+            flash("File has been deleted.")
+        except Exception as e:
+            flash(f"Error deleting file: {e}")
+    parent = posixpath.dirname(req_path)
+    return redirect(url_for('dir_listing', req_path=parent))
+
+# ------------------ Endpoint for deleting folders ------------------ #
+@app.route('/delete_folder/<path:req_path>')
+@requires_auth
+def delete_folder(req_path):
+    abs_path = safe_path(req_path)
+    if not os.path.isdir(abs_path):
+        flash("The selected item is not a folder or does not exist.")
+    else:
+        try:
+            shutil.rmtree(abs_path)
+            flash("Folder has been deleted.")
+        except Exception as e:
+            flash(f"Error deleting folder: {e}")
+    parent = posixpath.dirname(req_path)
+    return redirect(url_for('dir_listing', req_path=parent))
+
+# ------------------ Endpoint for creating folders ------------------ #
+@app.route('/create_folder/<path:req_path>', methods=['POST'])
+@requires_auth
+def create_folder(req_path):
+    abs_path = safe_path(req_path)
+    folder_name = request.form.get('folder_name', '').strip()
+    if folder_name == '':
+        flash("Folder name is empty.")
+        return redirect(url_for('dir_listing', req_path=req_path))
+    new_dir = os.path.join(abs_path, secure_filename(folder_name))
+    try:
+        os.makedirs(new_dir)
+        flash("Folder created successfully.")
+    except Exception as e:
+        flash(f"Error creating folder: {e}")
+    return redirect(url_for('dir_listing', req_path=req_path))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
