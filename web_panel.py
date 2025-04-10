@@ -275,7 +275,83 @@ def delete_bulk():
     parent = posixpath.dirname(selected[0]) if selected else ''
     return redirect(url_for('dir_listing', req_path=parent))
 
-# ------------------ Main Page – Listing Files and Monitoring ------------------ #
+# ------------------ Folder Creation Endpoint ------------------ #
+@app.route('/create_folder/<path:req_path>', methods=['POST'])
+@requires_auth
+def create_folder(req_path):
+    abs_path = safe_path(req_path)
+    folder_name = request.form.get('folder_name', '').strip()
+    if folder_name == '':
+        flash("Folder name is empty.")
+        return redirect(url_for('dir_listing', req_path=req_path))
+    new_dir = os.path.join(abs_path, secure_filename(folder_name))
+    try:
+        os.makedirs(new_dir)
+        flash("Folder created successfully.")
+    except Exception as e:
+        flash(f"Error creating folder: {e}")
+    return redirect(url_for('dir_listing', req_path=req_path))
+
+# ------------------ File Upload Endpoint (Manual Saving in Chunks) ------------------ #
+@app.route('/upload/<path:req_path>', methods=['POST'])
+@requires_auth
+def upload_file(req_path):
+    abs_dir = safe_path(req_path)
+    if 'file' not in request.files:
+        flash("No file selected.")
+        return redirect(url_for('dir_listing', req_path=req_path))
+    uploaded_files = request.files.getlist('file')
+    for file in uploaded_files:
+        if file.filename == '':
+            flash("One of the uploaded files has no name.")
+            continue
+        filename = secure_filename(file.filename)
+        save_path = os.path.join(abs_dir, filename)
+        try:
+            with open(save_path, 'wb') as f:
+                while True:
+                    chunk = file.stream.read(8192)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+            flash(f"File '{filename}' uploaded successfully.")
+        except Exception as e:
+            flash(f"Error saving file '{filename}': {e}")
+    return redirect(url_for('dir_listing', req_path=req_path))
+
+# ------------------ File Deletion Endpoint ------------------ #
+@app.route('/delete/<path:req_path>')
+@requires_auth
+def delete_file(req_path):
+    abs_path = safe_path(req_path)
+    if not os.path.isfile(abs_path):
+        flash("The selected item is not a file or does not exist.")
+    else:
+        try:
+            os.remove(abs_path)
+            flash("File has been deleted.")
+        except Exception as e:
+            flash(f"Error deleting file: {e}")
+    parent = posixpath.dirname(req_path)
+    return redirect(url_for('dir_listing', req_path=parent))
+
+# ------------------ Folder Deletion Endpoint ------------------ #
+@app.route('/delete_folder/<path:req_path>')
+@requires_auth
+def delete_folder(req_path):
+    abs_path = safe_path(req_path)
+    if not os.path.isdir(abs_path):
+        flash("The selected item is not a folder or does not exist.")
+    else:
+        try:
+            shutil.rmtree(abs_path)
+            flash("Folder has been deleted.")
+        except Exception as e:
+            flash(f"Error deleting folder: {e}")
+    parent = posixpath.dirname(req_path)
+    return redirect(url_for('dir_listing', req_path=parent))
+
+# ------------------ Main Directory Listing Endpoint ------------------ #
 @app.route('/', defaults={'req_path': ''})
 @app.route('/<path:req_path>')
 @requires_auth
@@ -321,13 +397,14 @@ def dir_listing(req_path):
     <html lang="en">
     <head>
       <meta charset="utf-8">
-      <title>Light Web Game Manager Panel</title>
+      <title>File Manager Panel</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
       <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
       <style>
          canvas { max-width: 300px; max-height: 300px; }
-         .progress-bar { color: black; } /* Set progress bar text color to black */
+         .progress { height: 40px; }
+         .progress-bar { color: black; font-size: 1.2em; }
       </style>
     </head>
     <body>
@@ -371,9 +448,7 @@ def dir_listing(req_path):
                     <input type="hidden" name="req_path" value="{{ req_path }}">
                     <select name="ssd_sensor" id="ssd_sensor_select" class="form-select" style="width:auto;" onchange="this.form.submit()">
                       {% for sensor, temp in monitoring_info.ssd_all.items() %}
-                        <option value="{{ sensor }}" {% if sensor == monitoring_info.ssd_selected_name %}selected{% endif %}>
-                          {{ sensor }}: {{ temp }}
-                        </option>
+                        <option value="{{ sensor }}" {% if sensor == monitoring_info.ssd_selected_name %}selected{% endif %}>{{ sensor }}: {{ temp }}</option>
                       {% endfor %}
                     </select>
                   </form>
@@ -433,7 +508,7 @@ def dir_listing(req_path):
           </div>
         </div>
         
-        <!-- Bulk Selection and File/Folder List -->
+        <!-- Bulk Selection and File/Folder List Section -->
         <form method="post" action="{{ url_for('delete_bulk') }}">
           <div class="card">
             <div class="card-header">
@@ -564,10 +639,9 @@ def dir_listing(req_path):
             .catch(err => console.error("Error fetching /api/monitoring:", err));
         }
         document.addEventListener("DOMContentLoaded", function() {
-          // Create progress bars if they don't exist (they are rendered in HTML)
           setInterval(updateMonitoring, 500); // Refresh every 0.5 seconds
         });
-        // Handle file upload with progress bar (AJAX)
+        // Handle file upload with progress bar via AJAX
         document.getElementById("uploadForm").addEventListener("submit", function(e) {
           e.preventDefault();
           var form = this;
@@ -598,82 +672,6 @@ def dir_listing(req_path):
     """
     return render_template_string(html_template, files=files, req_path=req_path,
                                   parent_path=parent_path, monitoring_info=monitoring_info)
-
-# ------------------ Endpoint for file uploads (manual saving in chunks) ------------------ #
-@app.route('/upload/<path:req_path>', methods=['POST'])
-@requires_auth
-def upload_file(req_path):
-    abs_dir = safe_path(req_path)
-    if 'file' not in request.files:
-        flash("No file selected.")
-        return redirect(url_for('dir_listing', req_path=req_path))
-    uploaded_files = request.files.getlist('file')
-    for file in uploaded_files:
-        if file.filename == '':
-            flash("One of the uploaded files has no name.")
-            continue
-        filename = secure_filename(file.filename)
-        save_path = os.path.join(abs_dir, filename)
-        try:
-            with open(save_path, 'wb') as f:
-                while True:
-                    chunk = file.stream.read(8192)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-            flash(f"File '{filename}' uploaded successfully.")
-        except Exception as e:
-            flash(f"Error saving file '{filename}': {e}")
-    return redirect(url_for('dir_listing', req_path=req_path))
-
-# ------------------ Endpoint for deleting files ------------------ #
-@app.route('/delete/<path:req_path>')
-@requires_auth
-def delete_file(req_path):
-    abs_path = safe_path(req_path)
-    if not os.path.isfile(abs_path):
-        flash("The selected item is not a file or does not exist.")
-    else:
-        try:
-            os.remove(abs_path)
-            flash("File has been deleted.")
-        except Exception as e:
-            flash(f"Error deleting file: {e}")
-    parent = posixpath.dirname(req_path)
-    return redirect(url_for('dir_listing', req_path=parent))
-
-# ------------------ Endpoint for deleting folders ------------------ #
-@app.route('/delete_folder/<path:req_path>')
-@requires_auth
-def delete_folder(req_path):
-    abs_path = safe_path(req_path)
-    if not os.path.isdir(abs_path):
-        flash("The selected item is not a folder or does not exist.")
-    else:
-        try:
-            shutil.rmtree(abs_path)
-            flash("Folder has been deleted.")
-        except Exception as e:
-            flash(f"Error deleting folder: {e}")
-    parent = posixpath.dirname(req_path)
-    return redirect(url_for('dir_listing', req_path=parent))
-
-# ------------------ Endpoint for creating folders ------------------ #
-@app.route('/create_folder/<path:req_path>', methods=['POST'])
-@requires_auth
-def create_folder(req_path):
-    abs_path = safe_path(req_path)
-    folder_name = request.form.get('folder_name', '').strip()
-    if folder_name == '':
-        flash("Folder name is empty.")
-        return redirect(url_for('dir_listing', req_path=req_path))
-    new_dir = os.path.join(abs_path, secure_filename(folder_name))
-    try:
-        os.makedirs(new_dir)
-        flash("Folder created successfully.")
-    except Exception as e:
-        flash(f"Error creating folder: {e}")
-    return redirect(url_for('dir_listing', req_path=req_path))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

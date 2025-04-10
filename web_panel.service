@@ -1,0 +1,13 @@
+[Unit]
+Description=RetroPie Light Web Manager Panel
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/retropie-lightwebmenager
+ExecStart=/usr/bin/python3 /home/pi/retropie-lightwebmenager/web_panel.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
