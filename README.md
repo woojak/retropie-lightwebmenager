@@ -172,4 +172,3 @@ Enjoy using the RetroPie Light Web Manager to efficiently manage your RetroPie s
 
 ---
 
-Feel free to adjust the repository URL, author information, and any other details as needed. This README is now ready to be copied into your GitHub repository.
