@@ -240,7 +240,7 @@ def api_monitoring():
 def control():
     action = request.form.get("action")
     if action == "reboot":
-        flash("Rebooting Raspberry Pi...")
+        flash("Rebooting Raspberry Pi ended with success")
         subprocess.call(["reboot"])
     elif action == "shutdown":
         flash("Shutting down Raspberry Pi...")
