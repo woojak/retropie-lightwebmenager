@@ -1,5 +1,5 @@
 [Unit]
-Description=RetroPie Light Web Manager
+Description=RetroPie Light Web Game Manager
 After=network-online.target
 Wants=network-online.target
 

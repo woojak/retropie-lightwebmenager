@@ -1,6 +1,6 @@
 #!/bin/bash
 # uninstall.sh
-# This script uninstalls the web_panel by stopping/disabling the service,
+# This script uninstalls the RetroPie Light Web Game Manager by stopping/disabling the service,
 # removing the web_panel.service file, and (optionally) deleting the repository folder.
 
 # Check if the script is run as root

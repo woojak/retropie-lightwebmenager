@@ -1,5 +1,5 @@
 #!/bin/bash
-# gui_web_panel.sh - SSH GUI for RetroPie Light Web Manager
+# gui_web_panel.sh - SSH GUI for RetroPie Light Web Game Manager
 # This script provides a clear, menu-driven interface (using whiptail)
 # to update configuration (stored in config.cfg), as well as to enable,
 # disable, and restart the web panel service.

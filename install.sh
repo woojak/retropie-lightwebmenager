@@ -1,5 +1,5 @@
 #!/bin/bash
-# install.sh - Fully Automatic Installation Script for the web_panel project
+# install.sh - Fully Automatic Installation Script for the RetroPie Light Web Game Manager project
 
 # This script installs the web_panel and related files, sets up the temporary folder,
 # clones or updates the repository, adjusts permissions for all files in the project,

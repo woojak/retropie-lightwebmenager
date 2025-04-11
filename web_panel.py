@@ -592,7 +592,7 @@ def dir_listing(req_path):
     <html lang="en">
     <head>
       <meta charset="utf-8">
-      <title>File Manager Panel</title>
+      <title>RetroPie Light Web Game Manager</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
       <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -604,7 +604,7 @@ def dir_listing(req_path):
     </head>
     <body>
       <div class="container py-4">
-        <h1 class="mb-4">File Manager Panel</h1>
+        <h1 class="mb-4">RetroPie Light Web Game Manager</h1>
         <div class="text-end mb-3">
           <a href="{{ url_for('edit_config') }}" class="btn btn-outline-warning">
             <i class="fas fa-edit"></i> Edit config.txt
