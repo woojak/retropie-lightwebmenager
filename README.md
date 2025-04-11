@@ -134,7 +134,7 @@ This TUI offers menus for:
   The refresh interval for system metrics is configurable (minimum 0.5 seconds).
 
 - **Service Control:**  
-  The web panel provides controls to restart, enable, or disable the service through both the web interface and the SSH GUI.
+  The web panel provides controls to restart, enable, stop or disable the service through both the web interface and the SSH GUI.
 
 ## Uninstallation
 
