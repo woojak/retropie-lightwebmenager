@@ -168,7 +168,3 @@ This project is licensed under the MIT License.
 
 
 Enjoy using the RetroPie Light Web Manager to efficiently manage your RetroPie setup!
-```
-
----
-
