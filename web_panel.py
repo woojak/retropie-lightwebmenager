@@ -14,14 +14,15 @@ from werkzeug.utils import secure_filename
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.cfg")
 
 def load_config():
-    # Default configuration values
+    # Default configuration values, including the new optional "show_nvme" setting
     config = {
         "login": "admin",
         "password": "mawerik1",
         "secret_key": "your_secret_key",
         "port": 5000,
         "monitor_refresh": 0.5,
-        "ssd_sensor": ""  # Save the selected SSD sensor here
+        "ssd_sensor": "",
+        "show_nvme": False
     }
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
@@ -33,16 +34,18 @@ def load_config():
                     key, val = line.split("=", 1)
                     key = key.strip()
                     val = val.strip()
-                    if key in ["port"]:
+                    if key == "port":
                         try:
                             config[key] = int(val)
                         except ValueError:
                             pass
-                    elif key in ["monitor_refresh"]:
+                    elif key == "monitor_refresh":
                         try:
                             config[key] = float(val)
                         except ValueError:
                             pass
+                    elif key == "show_nvme":
+                        config[key] = (val.lower() == "true")
                     else:
                         config[key] = val
     else:
@@ -53,12 +56,18 @@ def save_config(config):
     try:
         with open(CONFIG_FILE, "w") as f:
             for key, val in config.items():
-                f.write(f"{key}={val}\n")
+                if isinstance(val, bool):
+                    f.write(f"{key}={'True' if val else 'False'}\n")
+                else:
+                    f.write(f"{key}={val}\n")
     except PermissionError:
         os.chmod(CONFIG_FILE, 0o666)
         with open(CONFIG_FILE, "w") as f:
             for key, val in config.items():
-                f.write(f"{key}={val}\n")
+                if isinstance(val, bool):
+                    f.write(f"{key}={'True' if val else 'False'}\n")
+                else:
+                    f.write(f"{key}={val}\n")
 
 CONFIG = load_config()
 
@@ -137,6 +146,9 @@ def get_cpu_temp():
             return "N/A"
 
 def get_ssd_temperatures():
+    # Only perform NVMe temperature reading if the option is enabled
+    if not CONFIG.get("show_nvme"):
+        return {}
     sensors = {}
     try:
         output = subprocess.check_output(
@@ -162,7 +174,7 @@ def get_ssd_temperatures():
         return {}
 
 def get_monitoring_data(selected_sensor=None):
-    # If no sensor is provided, use the stored sensor
+    # Use stored sensor if no sensor is provided
     if selected_sensor is None:
         selected_sensor = CONFIG.get("ssd_sensor")
     cpu_usage = round_1(psutil.cpu_percent(interval=0.0))
@@ -183,7 +195,6 @@ def get_monitoring_data(selected_sensor=None):
         else:
             ssd_selected_name = list(ssd_temps.keys())[0]
             ssd_selected_temp = ssd_temps[ssd_selected_name]
-
     # Calculate system uptime
     boot_time = psutil.boot_time()
     uptime_td = datetime.now() - datetime.fromtimestamp(boot_time)
@@ -194,7 +205,7 @@ def get_monitoring_data(selected_sensor=None):
         uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
     else:
         uptime_str = f"{hours}h {minutes}m {seconds}s"
-
+    
     return {
         'cpu_usage': cpu_usage,
         'cpu_temp': cpu_temp,
@@ -240,7 +251,7 @@ def api_monitoring():
 def control():
     action = request.form.get("action")
     if action == "reboot":
-        flash("Rebooting Raspberry Pi ended with success")
+        flash("Rebooting Raspberry Pi ended with success.")
         subprocess.call(["reboot"])
     elif action == "shutdown":
         flash("Shutting down Raspberry Pi...")
@@ -270,6 +281,8 @@ def settings():
             new_secret_key = request.form.get('secret_key', '').strip()
             new_port = request.form.get('port', '').strip()
             new_refresh = request.form.get('monitor_refresh', '').strip()
+            # Update our new optional setting for NVMe temperature display
+            CONFIG['show_nvme'] = (request.form.get('show_nvme') == 'on')
             if new_secret_key:
                 CONFIG['secret_key'] = new_secret_key
                 app.secret_key = new_secret_key
@@ -357,6 +370,10 @@ def settings():
               <div class="mb-3">
                 <label for="monitor_refresh" class="form-label">Monitoring Refresh Interval (seconds, min 0.5)</label>
                 <input type="number" step="0.1" class="form-control" id="monitor_refresh" name="monitor_refresh" value="{{ config['monitor_refresh'] }}">
+              </div>
+              <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="show_nvme" name="show_nvme" {% if config['show_nvme'] %}checked{% endif %}>
+                <label class="form-check-label" for="show_nvme">Display NVMe Temperature</label>
               </div>
               <button type="submit" name="save_app_settings" class="btn btn-primary">Save App Settings</button>
             </form>
@@ -682,9 +699,9 @@ def dir_listing(req_path):
                 <strong>Uptime:</strong>
                 <span>{{ monitoring_info.uptime }}</span>
               </div>
-              <!-- SSD Sensor Selection -->
+              <!-- NVMe Option & Sensor Selection (only if show_nvme is enabled) -->
               <div class="col-md-3">
-                {% if monitoring_info.ssd_all %}
+                {% if config['show_nvme'] and monitoring_info.ssd_all %}
                   <form method="get" class="d-flex align-items-center flex-wrap">
                     <label for="ssd_sensor_select" class="me-2 mb-1"><small>Select SSD Sensor:</small></label>
                     <input type="hidden" name="req_path" value="{{ req_path }}">
@@ -887,7 +904,7 @@ def dir_listing(req_path):
               diskBar.textContent = data.disk_percent + "%";
               document.getElementById("cpu-usage").textContent = data.cpu_usage;
               document.getElementById("disk-percent").textContent = data.disk_percent;
-              document.getElementById("mem-text").innerHTML = data.mem_percent + "% used (" + data.mem_used_human + " / " + data.mem_total_human + ")";
+              document.getElementById("mem-text").innerHTML = data.mem_percent + "% used (" + data.disk_used_human + " / " + data.disk_total_human + ")";
             })
             .catch(err => console.error("Error fetching /api/monitoring:", err));
         }
@@ -929,7 +946,8 @@ def dir_listing(req_path):
                                   req_path=req_path,
                                   parent_path=parent_path,
                                   monitoring_info=monitoring_info,
-                                  monitor_refresh=CONFIG["monitor_refresh"])
+                                  monitor_refresh=CONFIG["monitor_refresh"],
+                                  config=CONFIG)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=CONFIG["port"], debug=True)
+    app.run(host='0.0.0.0', port=CONFIG["port"], debug=True) 
