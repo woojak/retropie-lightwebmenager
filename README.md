@@ -167,4 +167,4 @@ Contributions, issues, and feature requests are welcome! Please open an issue or
 This project is licensed under the MIT License.
 
 
-Enjoy using the RetroPie Light Web Manager to efficiently manage your RetroPie setup!
+Enjoy using the RetroPie Light Web Game Manager to efficiently manage your RetroPie setup!
