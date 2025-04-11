@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import re
 import posixpath
 import shutil
 import psutil
@@ -11,15 +10,52 @@ from flask import Flask, request, render_template_string, redirect, url_for, sen
 from functools import wraps
 from werkzeug.utils import secure_filename
 
-# Global configuration dictionary stored in this file.
-# Changes made in the Settings page will update this file.
-CONFIG = {
-    "login": "admin",
-    "password": "mawerik1",
-    "secret_key": "your_secret_key",
-    "port": 5000,
-    "monitor_refresh": 0.5  # in seconds; minimum allowed is 0.5
-}
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.cfg")
+
+# --- Helper functions to load and save configuration ---
+def load_config():
+    # Default configuration values
+    config = {
+        "login": "admin",
+        "password": "mawerik1",
+        "secret_key": "your_secret_key",
+        "port": 5000,
+        "monitor_refresh": 0.5
+    }
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip()
+                    # Convert types as needed
+                    if key in ["port"]:
+                        try:
+                            config[key] = int(val)
+                        except ValueError:
+                            pass
+                    elif key in ["monitor_refresh"]:
+                        try:
+                            config[key] = float(val)
+                        except ValueError:
+                            pass
+                    else:
+                        config[key] = val
+    else:
+        save_config(config)
+    return config
+
+def save_config(config):
+    with open(CONFIG_FILE, "w") as f:
+        for key, val in config.items():
+            f.write(f"{key}={val}\n")
+
+# Load configuration at startup
+CONFIG = load_config()
 
 # Set up a custom temporary directory to avoid issues with large file uploads
 TEMP_DIR = '/home/pi/tmp'
@@ -31,7 +67,7 @@ tempfile.tempdir = TEMP_DIR
 app = Flask(__name__)
 app.secret_key = CONFIG["secret_key"]
 
-# Global auth values taken from CONFIG.
+# Global auth variables from configuration
 USERNAME = CONFIG["login"]
 PASSWORD = CONFIG["password"]
 
@@ -108,7 +144,7 @@ def get_ssd_temperatures():
                 parts = line.split(":")
                 if len(parts) >= 2:
                     sensor_name = parts[0].strip()
-                    temp_str = parts[1].strip()
+                    temp_str = parts[1].strip()  # e.g., "28 C (301 K)"
                     tokens = temp_str.split()
                     if tokens:
                         raw_val = tokens[0].lower().replace("°c", "").replace("c", "").strip()
@@ -174,65 +210,50 @@ def api_monitoring():
     }
     return jsonify(response)
 
-# ------------------ Function to Update CONFIG in This File ------------------ #
-def update_config_file(new_config):
-    config_file = os.path.abspath(__file__)
-    with open(config_file, 'r', encoding='utf-8') as f:
-        contents = f.read()
-    # Update string values ("login", "password", "secret_key")
-    for key in ["login", "password", "secret_key"]:
-        if key in new_config:
-            contents = re.sub(r'("' + key + r'"\s*:\s*")[^"]*(")', r'\1' + new_config[key] + r'\2', contents)
-    # Update numeric values (port, monitor_refresh)
-    for key in ["port", "monitor_refresh"]:
-        if key in new_config:
-            contents = re.sub(r'("' + key + r'"\s*:\s*)[0-9.]+', r'\1' + str(new_config[key]), contents)
-    with open(config_file, 'w', encoding='utf-8') as f:
-        f.write(contents)
-    # Update the global CONFIG dictionary as well
-    CONFIG.update(new_config)
-
 # ------------------ Settings Endpoint ------------------ #
 @app.route('/settings', methods=['GET', 'POST'])
 @requires_auth
 def settings():
     global CONFIG, USERNAME, PASSWORD, app
-    # The current file path
-    WEB_PANEL = os.path.abspath(__file__)
+    message = ""
     if request.method == 'POST':
-        # Two separate forms: one for credentials and one for app settings.
         if 'save_credentials' in request.form:
             new_login = request.form.get('login', '').strip()
             new_password = request.form.get('password', '').strip()
-            changes = {}
             if new_login:
-                changes["login"] = new_login
+                CONFIG['login'] = new_login
                 USERNAME = new_login
             if new_password:
-                changes["password"] = new_password
+                CONFIG['password'] = new_password
                 PASSWORD = new_password
-            if changes:
-                update_config_file(changes)
-                flash("Credentials updated.")
+            message += "Credentials updated. "
         elif 'save_app_settings' in request.form:
             new_secret_key = request.form.get('secret_key', '').strip()
             new_port = request.form.get('port', '').strip()
             new_refresh = request.form.get('monitor_refresh', '').strip()
-            changes = {}
             if new_secret_key:
-                changes["secret_key"] = new_secret_key
+                CONFIG['secret_key'] = new_secret_key
                 app.secret_key = new_secret_key
             if new_port.isdigit():
-                changes["port"] = int(new_port)
+                CONFIG['port'] = int(new_port)
             try:
                 new_refresh_val = float(new_refresh)
                 if new_refresh_val >= 0.5:
-                    changes["monitor_refresh"] = new_refresh_val
+                    CONFIG['monitor_refresh'] = new_refresh_val
             except Exception:
                 pass
-            if changes:
-                update_config_file(changes)
-                flash("App settings updated. (Port changes will take effect on restart.)")
+            message += "App settings updated. (Port changes will take effect on restart.) "
+        elif 'restart_service' in request.form:
+            subprocess.call(["systemctl", "restart", "web_panel.service"])
+            message += "Service restarted. "
+        elif 'enable_service' in request.form:
+            subprocess.call(["systemctl", "enable", "web_panel.service"])
+            message += "Service enabled. "
+        elif 'disable_service' in request.form:
+            subprocess.call(["systemctl", "disable", "web_panel.service"])
+            message += "Service disabled. "
+        save_config(CONFIG)
+        flash(message)
         return redirect(url_for('settings'))
     settings_template = """
     <!doctype html>
@@ -254,6 +275,9 @@ def settings():
           </li>
           <li class="nav-item" role="presentation">
             <button class="nav-link" id="app-settings-tab" data-bs-toggle="tab" data-bs-target="#app-settings" type="button" role="tab" aria-controls="app-settings" aria-selected="false">App Settings</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="service-tab" data-bs-toggle="tab" data-bs-target="#service" type="button" role="tab" aria-controls="service" aria-selected="false">Service Management</button>
           </li>
         </ul>
         <div class="tab-content" id="settingsTabContent">
@@ -285,6 +309,19 @@ def settings():
                 <input type="number" step="0.1" class="form-control" id="monitor_refresh" name="monitor_refresh" value="{{ config['monitor_refresh'] }}">
               </div>
               <button type="submit" name="save_app_settings" class="btn btn-primary">Save App Settings</button>
+            </form>
+          </div>
+          <div class="tab-pane fade pt-3" id="service" role="tabpanel" aria-labelledby="service-tab">
+            <form method="post">
+              <div class="mb-3">
+                <button type="submit" name="restart_service" class="btn btn-warning mb-2">Restart Service</button>
+              </div>
+              <div class="mb-3">
+                <button type="submit" name="enable_service" class="btn btn-success mb-2">Enable Service</button>
+              </div>
+              <div class="mb-3">
+                <button type="submit" name="disable_service" class="btn btn-danger mb-2">Disable Service</button>
+              </div>
             </form>
           </div>
         </div>
