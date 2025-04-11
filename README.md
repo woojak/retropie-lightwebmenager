@@ -43,10 +43,6 @@ This repository contains a full-featured web panel for managing your RetroPie fi
 - Basic familiarity with the terminal.
 - Required packages: `python3`, `git`, `python3-pip`, and `whiptail`.
 
-> **Note:** Ensure that you have a temporary directory (`/home/pi/tmp`) set up with appropriate permissions:
-> ```bash
-> sudo mkdir -p /home/pi/tmp && sudo chmod 1777 /home/pi/tmp
-> ```
 
 ## Installation Steps
 
