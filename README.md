@@ -97,9 +97,9 @@ sudo journalctl -u web_panel.service
 
 ## Usage and Operation
 
-![Screen shoot](https://raw.githubusercontent.com/woojak/retropie_lwgmenager/refs/heads/main/images/Main.png)
-
 ### Web Interface
+
+![Screen shoot](https://raw.githubusercontent.com/woojak/retropie_lwgmenager/refs/heads/main/images/Main.png)
 
 Access the web panel (user: admin password: admin) by navigating to your Raspberry Pi’s IP address and the configured port (default is 5000) in your browser. The web interface includes:
 
