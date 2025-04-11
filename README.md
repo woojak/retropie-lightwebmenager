@@ -22,11 +22,11 @@ This repository contains a full-featured web panel for managing your RetroPie fi
 
 - **config.cfg**  
   A configuration file that stores persistent settings, including:
-  - Admin credentials (login and password)
-  - Secret key
+  - Admin credentials like login: admin and password: admin (recomendet to change)
+  - Secret key (recomendet to change)
   - Port number
   - Monitoring refresh interval
-  - NVMe sensor selection and display setting
+  - NVMe sensor selection and display setting if mvme is present.
 
 - **web_panel.service**  
   A systemd service file that runs the Flask application on startup.
@@ -99,7 +99,7 @@ sudo journalctl -u web_panel.service
 
 ### Web Interface
 
-Access the web panel by navigating to your Raspberry Pi’s IP address and the configured port (default is 5000) in your browser. The web interface includes:
+Access the web panel (user: admin password: admin) by navigating to your Raspberry Pi’s IP address and the configured port (default is 5000) in your browser. The web interface includes:
 
 - **Monitoring Section:**  
   Displays live system statistics including CPU temperature, CPU usage, memory usage, disk usage, and system uptime using progress bars. If NVMe monitoring is enabled, a dropdown menu allows you to select the sensor, and your selection is saved.
