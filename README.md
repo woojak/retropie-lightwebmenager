@@ -9,7 +9,7 @@ This repository contains a full-featured web panel for managing your RetroPie fi
   The main Python Flask application that provides:
   - File and directory management (browse, upload, delete, edit).
   - System monitoring (CPU temperature, CPU usage, memory usage, disk usage).
-  - NVMe sensor selection with persistence (the last selected sensor is stored in `selected_sensor.txt`).
+  - NVMe sensor selection with persistence.
   - System control functions (reboot and shutdown the Raspberry Pi).
   - An endpoint for editing `/boot/firmware/config.txt`.
 
