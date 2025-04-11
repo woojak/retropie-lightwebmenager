@@ -1,5 +1,5 @@
 
-# RetroPie Light Web Manager
+# RetroPie Light Web Game Manager
 
 This repository contains a full-featured web panel for managing your RetroPie file system, monitoring system performance, and controlling your Raspberry Pi. The web interface is built using Python and Flask, and it features persistent configuration storage, system control options (such as reboot/shutdown), file management, and a text-based SSH GUI for changing settings and managing the service.
 
