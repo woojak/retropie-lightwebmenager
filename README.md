@@ -155,9 +155,6 @@ The uninstallation script will stop and disable the service, remove the systemd 
   sudo mkdir -p /home/pi/tmp && sudo chmod 1777 /home/pi/tmp
   ```
 
-- **NVMe Sensor Persistence:**  
-  The selected sensor is saved to `selected_sensor.txt` in the project folder. Make sure this file is accessible.
-
 ## Contributing
 
 Contributions, issues, and feature requests are welcome! Please open an issue or submit a pull request.
