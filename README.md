@@ -104,7 +104,7 @@ Access the web panel by navigating to your Raspberry Pi’s IP address and the c
   Modify:
   - **Admin Credentials:** Change the login and password.
   - **App Settings:** Change the secret key, port, and monitoring refresh interval.
-  These settings are stored in `config.cfg` and persist across restarts.
+  These settings are stored in `config.cfg`, only port setting persist across restarts.
 
 ### SSH GUI
 
