@@ -10,9 +10,9 @@ from flask import Flask, request, render_template_string, redirect, url_for, sen
 from functools import wraps
 from werkzeug.utils import secure_filename
 
+# --- Configuration file handling ---
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.cfg")
 
-# --- Helper functions to load and save configuration ---
 def load_config():
     # Default configuration values
     config = {
@@ -32,7 +32,6 @@ def load_config():
                     key, val = line.split("=", 1)
                     key = key.strip()
                     val = val.strip()
-                    # Convert types as needed
                     if key in ["port"]:
                         try:
                             config[key] = int(val)
@@ -54,10 +53,9 @@ def save_config(config):
         for key, val in config.items():
             f.write(f"{key}={val}\n")
 
-# Load configuration at startup
 CONFIG = load_config()
 
-# Set up a custom temporary directory to avoid issues with large file uploads
+# --- Set up a custom temporary directory ---
 TEMP_DIR = '/home/pi/tmp'
 if not os.path.exists(TEMP_DIR):
     os.makedirs(TEMP_DIR, mode=0o1777)
@@ -67,14 +65,14 @@ tempfile.tempdir = TEMP_DIR
 app = Flask(__name__)
 app.secret_key = CONFIG["secret_key"]
 
-# Global auth variables from configuration
+# Global authentication values from CONFIG
 USERNAME = CONFIG["login"]
 PASSWORD = CONFIG["password"]
 
 # Base directory for file management
 BASE_DIR = os.path.abspath("/home/pi/RetroPie")
 
-# ------------------ Jinja2 Filters ------------------ #
+# --- Jinja2 Filters ---
 def format_datetime(value):
     return datetime.fromtimestamp(value).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -90,7 +88,7 @@ def format_filesize(value):
 app.jinja_env.filters['datetimeformat'] = format_datetime
 app.jinja_env.filters['filesizeformat'] = format_filesize
 
-# ------------------ Authentication Functions ------------------ #
+# --- Authentication Functions ---
 def check_auth(username, password):
     return username == CONFIG["login"] and password == CONFIG["password"]
 
@@ -115,7 +113,7 @@ def safe_path(path):
         abort(403)
     return abs_path
 
-# ------------------ Helper Functions ------------------ #
+# --- Helper Functions ---
 def round_1(x):
     return round(x, 1)
 
@@ -190,7 +188,7 @@ def get_monitoring_data(selected_sensor=None):
         'ssd_temp': ssd_selected_temp
     }
 
-# ------------------ Monitoring API Endpoint ------------------ #
+# --- Monitoring API Endpoint ---
 @app.route('/api/monitoring')
 @requires_auth
 def api_monitoring():
@@ -210,7 +208,22 @@ def api_monitoring():
     }
     return jsonify(response)
 
-# ------------------ Settings Endpoint ------------------ #
+# --- Control Endpoint ---
+@app.route('/control', methods=['POST'])
+@requires_auth
+def control():
+    action = request.form.get("action")
+    if action == "reboot":
+        flash("Rebooting Raspberry Pi...")
+        subprocess.call(["reboot"])
+    elif action == "shutdown":
+        flash("Shutting down Raspberry Pi...")
+        subprocess.call(["shutdown", "now"])
+    else:
+        flash("Invalid action.")
+    return redirect(url_for('dir_listing', req_path=""))
+
+# --- Settings Endpoint ---
 @app.route('/settings', methods=['GET', 'POST'])
 @requires_auth
 def settings():
@@ -409,7 +422,7 @@ def edit_config():
     <html lang="en">
     <head>
       <meta charset="utf-8">
-      <title>Edit config.txt</title>
+      <title>Edit RPI config</title>
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
     </head>
     <body>
@@ -533,7 +546,17 @@ def dir_listing(req_path):
         return f"Directory or file does not exist: {req_path}", 404
     if os.path.isfile(abs_path):
         return send_from_directory(os.path.dirname(abs_path), os.path.basename(abs_path), as_attachment=True)
+
+    # Process the selected SSD sensor.
     selected_sensor = request.args.get('ssd_sensor', None)
+    sensor_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "selected_sensor.txt")
+    if selected_sensor:
+        with open(sensor_file, "w") as sf:
+            sf.write(selected_sensor)
+    else:
+        if os.path.exists(sensor_file):
+            selected_sensor = open(sensor_file, "r").read().strip()
+
     monitoring_info = get_monitoring_data(selected_sensor)
     files = []
     try:
@@ -650,6 +673,19 @@ def dir_listing(req_path):
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+        
+        <!-- Control Section -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h3>Control</h3>
+          </div>
+          <div class="card-body">
+            <form method="post" action="{{ url_for('control') }}">
+              <button type="submit" name="action" value="reboot" class="btn btn-warning mb-2">Reboot Raspberry Pi</button>
+              <button type="submit" name="action" value="shutdown" class="btn btn-danger mb-2">Shutdown Raspberry Pi</button>
+            </form>
           </div>
         </div>
         
@@ -794,19 +830,15 @@ def dir_listing(req_path):
             .then(data => {
               document.getElementById("cpu-temp").textContent = data.cpu_temp;
               document.getElementById("ssd-temp").textContent = data.ssd_temp;
-              // Update CPU progress bar
               let cpuBar = document.getElementById("cpuBar");
               cpuBar.style.width = data.cpu_usage + "%";
               cpuBar.textContent = data.cpu_usage + "%";
-              // Update Memory progress bar
               let memBar = document.getElementById("memBar");
               memBar.style.width = data.mem_percent + "%";
               memBar.textContent = data.mem_percent + "%";
-              // Update Disk progress bar
               let diskBar = document.getElementById("diskBar");
               diskBar.style.width = data.disk_percent + "%";
               diskBar.textContent = data.disk_percent + "%";
-              // Update extra text values
               document.getElementById("cpu-usage").textContent = data.cpu_usage;
               document.getElementById("disk-percent").textContent = data.disk_percent;
               document.getElementById("mem-text").innerHTML = data.mem_percent + "% used (" + data.mem_used_human + " / " + data.mem_total_human + ")";
@@ -814,7 +846,7 @@ def dir_listing(req_path):
             .catch(err => console.error("Error fetching /api/monitoring:", err));
         }
         document.addEventListener("DOMContentLoaded", function() {
-          setInterval(updateMonitoring, {{ monitor_refresh * 1000 }}); // Refresh based on setting
+          setInterval(updateMonitoring, {{ monitor_refresh * 1000 }});
         });
         // Handle file upload with progress bar via AJAX
         document.getElementById("uploadForm").addEventListener("submit", function(e) {
