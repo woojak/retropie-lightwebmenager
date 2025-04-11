@@ -1,9 +1,9 @@
 #!/bin/bash
 # gui_web_panel.sh - SSH GUI for RetroPie Light Web Game Manager
 # This script provides a clear, menu-driven interface (using whiptail)
-# to update configuration (stored in config.cfg), as well as to enable,
-# disable, and restart the web panel service.
-# All project files should be in the same folder (e.g., /home/pi/retropie_lwgmenager).
+# to update configuration (stored in config.cfg) and to enable, disable,
+# restart, and stop the web panel service.
+# All project files should be in the same folder (e.g., /home/pi/retropie_lwgmanager).
 
 # Check if whiptail is installed
 if ! command -v whiptail >/dev/null 2>&1; then
@@ -130,14 +130,15 @@ configure_app_settings() {
   done
 }
 
-# Function: Service Management Menu (Enable/Disable/Restart Service)
+# Function: Service Management Menu (Restart/Enable/Disable/Stop Service)
 manage_service() {
   while true; do
-    CHOICE=$(whiptail --title "Service Management" --menu "Current Service Status:\n(Use this menu to manage the web panel service)" 15 60 4 \
+    CHOICE=$(whiptail --title "Service Management" --menu "Current Service Status:\n(Use this menu to manage the web panel service)" 15 60 5 \
       "1" "Restart Service" \
       "2" "Enable Service" \
       "3" "Disable Service" \
-      "4" "Back" 3>&1 1>&2 2>&3)
+      "4" "Stop Service" \
+      "5" "Back" 3>&1 1>&2 2>&3)
     case $CHOICE in
       "1")
         sudo systemctl restart web_panel.service
@@ -152,6 +153,10 @@ manage_service() {
         whiptail --msgbox "Service disabled." 8 40
         ;;
       "4")
+        sudo systemctl stop web_panel.service
+        whiptail --msgbox "Service stopped." 8 40
+        ;;
+      "5")
         break
         ;;
       *)
