@@ -1,8 +1,4 @@
-Below is a complete README file in Markdown format. Simply copy the text into a file named **README.md** in your repository and push it to GitHub. This document describes the functionality, installation steps, configuration, and usage of your RetroPie Light Web Manager project.
 
----
-
-```markdown
 # RetroPie Light Web Manager
 
 This repository contains a full-featured web panel for managing your RetroPie file system, monitoring system performance, and controlling your Raspberry Pi. The web interface is built using Python and Flask, and it features persistent configuration storage, system control options (such as reboot/shutdown), file management, and a text-based SSH GUI for changing settings and managing the service.
@@ -174,7 +170,6 @@ Contributions, issues, and feature requests are welcome! Please open an issue or
 
 This project is licensed under the MIT License.
 
----
 
 Enjoy using the RetroPie Light Web Manager to efficiently manage your RetroPie setup!
 ```
