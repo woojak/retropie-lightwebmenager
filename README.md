@@ -1,6 +1,4 @@
-Poniżej znajdziesz zaktualizowany opis (README) repozytorium, który został dostosowany do aktualnego skryptu `web_panel.py`. Tekst zawiera szczegółowy opis funkcji, zawartości repozytorium, kroków instalacji, sposobu użycia oraz sekcję dotyczącą rozwiązywania problemów. Możesz go bezpośrednio skopiować do pliku README.md w swoim repozytorium na GitHub.
 
-```markdown
 # RetroPie Light Web Game Manager
 
 This repository contains a full-featured web panel for managing your RetroPie file system, monitoring system performance, and controlling your Raspberry Pi. The web interface is built using Python and Flask and includes persistent configuration storage, system control options (such as reboot/shutdown), file management with bulk selection (including a "select all" feature), and a text-based SSH GUI for changing settings and managing the service.
