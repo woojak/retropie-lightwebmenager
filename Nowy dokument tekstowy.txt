@@ -1,8 +1,0 @@
-https://github.com/woojak/retropie_lwgmenager.git
-
-
-
-git https://github.com/woojak/retropie_lwgmenager.git
-cd retropie_lwgmenager
-
-sudo systemctl status web_panel.service
