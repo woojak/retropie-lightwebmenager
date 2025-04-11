@@ -434,27 +434,27 @@ def edit_config():
         try:
             with open(config_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
-            flash("config.txt has been updated.")
+            flash("RPI config.txt has been updated.")
             return redirect(url_for('dir_listing', req_path=''))
         except Exception as e:
-            flash(f"Error saving config.txt: {e}")
+            flash(f"Error saving RPI config.txt: {e}")
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             content = f.read()
     except Exception as e:
-        flash(f"Error reading config.txt: {e}")
+        flash(f"Error reading RPI config.txt: {e}")
         return redirect(url_for('dir_listing', req_path=''))
     edit_template = """
     <!doctype html>
     <html lang="en">
     <head>
       <meta charset="utf-8">
-      <title>Edit config.txt</title>
+      <title>Edit RPI config.txt</title>
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
     </head>
     <body>
       <div class="container py-4">
-        <h1>Edit file: config.txt</h1>
+        <h1>Edit RPI config.txt</h1>
         <form method="post">
           <div class="mb-3">
             <textarea name="content" class="form-control" rows="20">{{ content }}</textarea>
@@ -615,7 +615,7 @@ def dir_listing(req_path):
     <html lang="en">
     <head>
       <meta charset="utf-8">
-      <title>File Manager Panel</title>
+      <title>RetroPie Light Web Game Manager</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
       <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -627,10 +627,10 @@ def dir_listing(req_path):
     </head>
     <body>
       <div class="container py-4">
-        <h1 class="mb-4">File Manager Panel</h1>
+        <h1 class="mb-4">RetroPie Light Web Game Manager</h1>
         <div class="text-end mb-3">
           <a href="{{ url_for('edit_config') }}" class="btn btn-outline-warning">
-            <i class="fas fa-edit"></i> Edit config.txt
+            <i class="fas fa-edit"></i> Edit RPI config.txt
           </a>
           <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary">
             <i class="fas fa-cog"></i> Settings
