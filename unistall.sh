@@ -10,7 +10,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 SERVICE_NAME="web_panel.service"
-REPO_DIR="/home/pi/retropie_lightwebmenager"
+REPO_DIR="/home/pi/retropie_lwgmenager"
 
 echo "Stopping the $SERVICE_NAME service..."
 systemctl stop $SERVICE_NAME
