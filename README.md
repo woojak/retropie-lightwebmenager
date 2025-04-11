@@ -50,7 +50,7 @@ This repository contains a full-featured web panel for managing your RetroPie fi
 
    Open a terminal and run:
    ```bash
-   sudo git clone https://github.com/yourusername/retropie_lwgmenager.git /home/pi/retropie_lwgmenager
+   sudo git clone --depth=1 https://github.com/woojak/retropie_lwgmenager.git
    cd /home/pi/retropie_lwgmenager
    ```
    > If the repository is already present, update it using:
