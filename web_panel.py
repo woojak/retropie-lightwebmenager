@@ -821,7 +821,7 @@ def dir_listing(req_path):
               <table class="table table-striped table-hover">
                 <thead>
                   <tr>
-                    <th>Select</th>
+                    <th><input type="checkbox" id="select-all" onclick="toggleSelectAll(this)"> Select</th>
                     <th>Icon</th>
                     <th>Name</th>
                     <th>Type</th>
@@ -902,9 +902,6 @@ def dir_listing(req_path):
               let diskBar = document.getElementById("diskBar");
               diskBar.style.width = data.disk_percent + "%";
               diskBar.textContent = data.disk_percent + "%";
-              document.getElementById("cpu-usage").textContent = data.cpu_usage;
-              document.getElementById("disk-percent").textContent = data.disk_percent;
-              document.getElementById("mem-text").innerHTML = data.mem_percent + "% used (" + data.disk_used_human + " / " + data.disk_total_human + ")";
             })
             .catch(err => console.error("Error fetching /api/monitoring:", err));
         }
@@ -936,6 +933,13 @@ def dir_listing(req_path):
           };
           xhr.send(formData);
         });
+        // Function to toggle "select all" checkboxes
+        function toggleSelectAll(source) {
+          let checkboxes = document.querySelectorAll('input[name="selected_files"]');
+          checkboxes.forEach(function(checkbox) {
+            checkbox.checked = source.checked;
+          });
+        }
       </script>
       <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
     </body>
@@ -950,4 +954,4 @@ def dir_listing(req_path):
                                   config=CONFIG)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=CONFIG["port"], debug=True) 
+    app.run(host='0.0.0.0', port=CONFIG["port"], debug=True)
