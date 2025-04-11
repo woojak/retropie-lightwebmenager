@@ -6,7 +6,7 @@
 # The web_panel.py file is assumed to be located in /home/pi/retropie-lightwebmenager
 
 # Define paths
-BASE_DIR="/home/pi/retropie-lightwebmenager"
+BASE_DIR="/home/pi/retropie-lwgmenager"
 WEB_PANEL="$BASE_DIR/web_panel.py"
 SERVICE_NAME="web_panel.service"
 UNINSTALL_SCRIPT="$BASE_DIR/uninstall.sh"

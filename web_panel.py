@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 import posixpath
 import shutil
 import psutil
@@ -10,8 +11,8 @@ from flask import Flask, request, render_template_string, redirect, url_for, sen
 from functools import wraps
 from werkzeug.utils import secure_filename
 
-# Global configuration dictionary stored in web_panel.py
-# (Changes made in the Settings page will update this file using sed)
+# Global configuration dictionary stored in this file.
+# Changes made in the Settings page will update this file.
 CONFIG = {
     "login": "admin",
     "password": "mawerik1",
@@ -20,7 +21,7 @@ CONFIG = {
     "monitor_refresh": 0.5  # in seconds; minimum allowed is 0.5
 }
 
-# Set up custom temporary directory to avoid issues with large file uploads
+# Set up a custom temporary directory to avoid issues with large file uploads
 TEMP_DIR = '/home/pi/tmp'
 if not os.path.exists(TEMP_DIR):
     os.makedirs(TEMP_DIR, mode=0o1777)
@@ -30,7 +31,7 @@ tempfile.tempdir = TEMP_DIR
 app = Flask(__name__)
 app.secret_key = CONFIG["secret_key"]
 
-# Global auth values from CONFIG
+# Global auth values taken from CONFIG.
 USERNAME = CONFIG["login"]
 PASSWORD = CONFIG["password"]
 
@@ -107,7 +108,7 @@ def get_ssd_temperatures():
                 parts = line.split(":")
                 if len(parts) >= 2:
                     sensor_name = parts[0].strip()
-                    temp_str = parts[1].strip()  # e.g., "28 C (301 K)"
+                    temp_str = parts[1].strip()
                     tokens = temp_str.split()
                     if tokens:
                         raw_val = tokens[0].lower().replace("°c", "").replace("c", "").strip()
@@ -173,54 +174,65 @@ def api_monitoring():
     }
     return jsonify(response)
 
+# ------------------ Function to Update CONFIG in This File ------------------ #
+def update_config_file(new_config):
+    config_file = os.path.abspath(__file__)
+    with open(config_file, 'r', encoding='utf-8') as f:
+        contents = f.read()
+    # Update string values ("login", "password", "secret_key")
+    for key in ["login", "password", "secret_key"]:
+        if key in new_config:
+            contents = re.sub(r'("' + key + r'"\s*:\s*")[^"]*(")', r'\1' + new_config[key] + r'\2', contents)
+    # Update numeric values (port, monitor_refresh)
+    for key in ["port", "monitor_refresh"]:
+        if key in new_config:
+            contents = re.sub(r'("' + key + r'"\s*:\s*)[0-9.]+', r'\1' + str(new_config[key]), contents)
+    with open(config_file, 'w', encoding='utf-8') as f:
+        f.write(contents)
+    # Update the global CONFIG dictionary as well
+    CONFIG.update(new_config)
+
 # ------------------ Settings Endpoint ------------------ #
-# This endpoint updates configuration variables in the web_panel.py file using sed.
-# It has two separate forms: one for credentials and one for other app settings.
 @app.route('/settings', methods=['GET', 'POST'])
 @requires_auth
 def settings():
     global CONFIG, USERNAME, PASSWORD, app
+    # The current file path
     WEB_PANEL = os.path.abspath(__file__)
     if request.method == 'POST':
+        # Two separate forms: one for credentials and one for app settings.
         if 'save_credentials' in request.form:
-            NEW_LOGIN=$( (echo "$NEW_LOGIN" ))
-            NEW_LOGIN=$(echo "$NEW_LOGIN")   # just to ensure variable substitution
-            NEW_LOGIN=$(whiptail --inputbox "Enter new login:" 8 60 "$(grep -E '"login"[[:space:]]*:' "$WEB_PANEL" | head -n1 | sed -E 's/.*"login"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')" 3>&1 1>&2 2>&3)
-            NEW_PASSWORD=$(whiptail --inputbox "Enter new password:" 8 60 "$(grep -E '"password"[[:space:]]*:' "$WEB_PANEL" | head -n1 | sed -E 's/.*"password"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')" 3>&1 1>&2 2>&3)
-            if [ -n "$NEW_LOGIN" ]; then
-                sudo sed -E -i 's/"login"[[:space:]]*:[[:space:]]*"[^"]*"/"login": "'"$NEW_LOGIN"'"/' "$WEB_PANEL"
-                CONFIG["login"]="$NEW_LOGIN"
-                USERNAME="$NEW_LOGIN"
-            fi
-            if [ -n "$NEW_PASSWORD" ]; then
-                sudo sed -E -i 's/"password"[[:space:]]*:[[:space:]]*"[^"]*"/"password": "'"$NEW_PASSWORD"'"/' "$WEB_PANEL"
-                CONFIG["password"]="$NEW_PASSWORD"
-                PASSWORD="$NEW_PASSWORD"
-            fi
-            whiptail --msgbox "Credentials updated." 8 40
+            new_login = request.form.get('login', '').strip()
+            new_password = request.form.get('password', '').strip()
+            changes = {}
+            if new_login:
+                changes["login"] = new_login
+                USERNAME = new_login
+            if new_password:
+                changes["password"] = new_password
+                PASSWORD = new_password
+            if changes:
+                update_config_file(changes)
+                flash("Credentials updated.")
         elif 'save_app_settings' in request.form:
-            NEW_SECRET_KEY=$(whiptail --inputbox "Enter new secret key:" 8 60 "$(grep -E '"secret_key"[[:space:]]*:' "$WEB_PANEL" | head -n1 | sed -E 's/.*"secret_key"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')" 3>&1 1>&2 2>&3)
-            NEW_PORT=$(whiptail --inputbox "Enter new port:" 8 60 "$(grep -E '"port"[[:space:]]*:' "$WEB_PANEL" | head -n1 | sed -E 's/.*"port"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/')" 3>&1 1>&2 2>&3)
-            NEW_REFRESH=$(whiptail --inputbox "Enter new monitoring refresh interval (seconds, min 0.5):" 8 60 "$(grep -E '"monitor_refresh"[[:space:]]*:' "$WEB_PANEL" | head -n1 | sed -E 's/.*"monitor_refresh"[[:space:]]*:[[:space:]]*([0-9.]+).*/\1/')" 3>&1 1>&2 2>&3)
-            if [ -n "$NEW_SECRET_KEY" ]; then
-                sudo sed -E -i 's/"secret_key"[[:space:]]*:[[:space:]]*"[^"]*"/"secret_key": "'"$NEW_SECRET_KEY"'"/' "$WEB_PANEL"
-                CONFIG["secret_key"]="$NEW_SECRET_KEY"
-                app.secret_key="$NEW_SECRET_KEY"
-            fi
-            if [[ "$NEW_PORT" =~ ^[0-9]+$ ]]; then
-                sudo sed -E -i 's/"port"[[:space:]]*:[[:space:]]*[0-9]+/"port": '"$NEW_PORT"'/' "$WEB_PANEL"
-                CONFIG["port"]=$NEW_PORT
-            fi
-            if [ -n "$NEW_REFRESH" ]; then
-                # Only update if value is at least 0.5
-                REF=$(echo "$NEW_REFRESH" | awk '{printf "%.1f",$0}')
-                if (( $(echo "$REF >= 0.5" | bc -l) )); then
-                    sudo sed -E -i 's/"monitor_refresh"[[:space:]]*:[[:space:]]*[0-9.]+/"monitor_refresh": '"$REF"'/' "$WEB_PANEL"
-                    CONFIG["monitor_refresh"]=$REF
-                fi
-            fi
-            whiptail --msgbox "App settings updated. (Port changes will take effect on restart.)" 8 50
-        fi
+            new_secret_key = request.form.get('secret_key', '').strip()
+            new_port = request.form.get('port', '').strip()
+            new_refresh = request.form.get('monitor_refresh', '').strip()
+            changes = {}
+            if new_secret_key:
+                changes["secret_key"] = new_secret_key
+                app.secret_key = new_secret_key
+            if new_port.isdigit():
+                changes["port"] = int(new_port)
+            try:
+                new_refresh_val = float(new_refresh)
+                if new_refresh_val >= 0.5:
+                    changes["monitor_refresh"] = new_refresh_val
+            except Exception:
+                pass
+            if changes:
+                update_config_file(changes)
+                flash("App settings updated. (Port changes will take effect on restart.)")
         return redirect(url_for('settings'))
     settings_template = """
     <!doctype html>
@@ -757,10 +769,10 @@ def dir_listing(req_path):
               let diskBar = document.getElementById("diskBar");
               diskBar.style.width = data.disk_percent + "%";
               diskBar.textContent = data.disk_percent + "%";
-              // Update additional text values
+              // Update extra text values
               document.getElementById("cpu-usage").textContent = data.cpu_usage;
               document.getElementById("disk-percent").textContent = data.disk_percent;
-              document.getElementById("mem-text").innerHTML = data.mem_percent + "% used (" + data.disk_used_human + " / " + data.disk_total_human + ")";
+              document.getElementById("mem-text").innerHTML = data.mem_percent + "% used (" + data.mem_used_human + " / " + data.mem_total_human + ")";
             })
             .catch(err => console.error("Error fetching /api/monitoring:", err));
         }
