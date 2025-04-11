@@ -46,7 +46,7 @@ This repository contains a full-featured web panel for managing your RetroPie fi
   A text-based graphical (TUI) script (using whiptail) for managing settings and service control via SSH. It offers submenus for:
   - Configuring credentials (login & password)
   - Configuring app settings (secret key, port, and monitoring refresh interval)
-  - Managing the service (restart, enable, disable)
+  - Managing the service (restart, enable,stop, disable)
   - Running the install or uninstall scripts
 
 ## Prerequisites
@@ -164,9 +164,7 @@ This script stops and disables the service, removes the systemd service file, an
 
 Contributions, issues, and feature requests are welcome! Please open an issue or submit a pull request.
 
-## License
 
-This project is licensed under the MIT License.
 
 
 
