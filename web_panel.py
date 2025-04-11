@@ -10,7 +10,17 @@ from flask import Flask, request, render_template_string, redirect, url_for, sen
 from functools import wraps
 from werkzeug.utils import secure_filename
 
-# Set up a custom temporary directory to avoid issues with large file uploads
+# Global configuration dictionary stored in web_panel.py
+# (Changes made in the Settings page will update this file using sed)
+CONFIG = {
+    "login": "admin",
+    "password": "mawerik1",
+    "secret_key": "your_secret_key",
+    "port": 5000,
+    "monitor_refresh": 0.5  # in seconds; minimum allowed is 0.5
+}
+
+# Set up custom temporary directory to avoid issues with large file uploads
 TEMP_DIR = '/home/pi/tmp'
 if not os.path.exists(TEMP_DIR):
     os.makedirs(TEMP_DIR, mode=0o1777)
@@ -18,11 +28,13 @@ os.environ['TMPDIR'] = TEMP_DIR
 tempfile.tempdir = TEMP_DIR
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'  # Change to your own secret key
+app.secret_key = CONFIG["secret_key"]
 
-# Authorization settings and base directory
-USERNAME = 'admin'
-PASSWORD = 'mawerik1'
+# Global auth values from CONFIG
+USERNAME = CONFIG["login"]
+PASSWORD = CONFIG["password"]
+
+# Base directory for file management
 BASE_DIR = os.path.abspath("/home/pi/RetroPie")
 
 # ------------------ Jinja2 Filters ------------------ #
@@ -43,7 +55,7 @@ app.jinja_env.filters['filesizeformat'] = format_filesize
 
 # ------------------ Authentication Functions ------------------ #
 def check_auth(username, password):
-    return username == USERNAME and password == PASSWORD
+    return username == CONFIG["login"] and password == CONFIG["password"]
 
 def authenticate():
     return Response(
@@ -114,7 +126,6 @@ def get_monitoring_data(selected_sensor=None):
     disk = psutil.disk_usage(BASE_DIR)
     disk_percent = round_1((disk.used / disk.total) * 100) if disk.total > 0 else 0
     disk_free = disk.total - disk.used
-
     cpu_temp = get_cpu_temp()
     ssd_temps = get_ssd_temperatures()
     if not ssd_temps:
@@ -161,6 +172,118 @@ def api_monitoring():
         'ssd_all': mon['ssd_all']
     }
     return jsonify(response)
+
+# ------------------ Settings Endpoint ------------------ #
+# This endpoint updates configuration variables in the web_panel.py file using sed.
+# It has two separate forms: one for credentials and one for other app settings.
+@app.route('/settings', methods=['GET', 'POST'])
+@requires_auth
+def settings():
+    global CONFIG, USERNAME, PASSWORD, app
+    WEB_PANEL = os.path.abspath(__file__)
+    if request.method == 'POST':
+        if 'save_credentials' in request.form:
+            NEW_LOGIN=$( (echo "$NEW_LOGIN" ))
+            NEW_LOGIN=$(echo "$NEW_LOGIN")   # just to ensure variable substitution
+            NEW_LOGIN=$(whiptail --inputbox "Enter new login:" 8 60 "$(grep -E '"login"[[:space:]]*:' "$WEB_PANEL" | head -n1 | sed -E 's/.*"login"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')" 3>&1 1>&2 2>&3)
+            NEW_PASSWORD=$(whiptail --inputbox "Enter new password:" 8 60 "$(grep -E '"password"[[:space:]]*:' "$WEB_PANEL" | head -n1 | sed -E 's/.*"password"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')" 3>&1 1>&2 2>&3)
+            if [ -n "$NEW_LOGIN" ]; then
+                sudo sed -E -i 's/"login"[[:space:]]*:[[:space:]]*"[^"]*"/"login": "'"$NEW_LOGIN"'"/' "$WEB_PANEL"
+                CONFIG["login"]="$NEW_LOGIN"
+                USERNAME="$NEW_LOGIN"
+            fi
+            if [ -n "$NEW_PASSWORD" ]; then
+                sudo sed -E -i 's/"password"[[:space:]]*:[[:space:]]*"[^"]*"/"password": "'"$NEW_PASSWORD"'"/' "$WEB_PANEL"
+                CONFIG["password"]="$NEW_PASSWORD"
+                PASSWORD="$NEW_PASSWORD"
+            fi
+            whiptail --msgbox "Credentials updated." 8 40
+        elif 'save_app_settings' in request.form:
+            NEW_SECRET_KEY=$(whiptail --inputbox "Enter new secret key:" 8 60 "$(grep -E '"secret_key"[[:space:]]*:' "$WEB_PANEL" | head -n1 | sed -E 's/.*"secret_key"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')" 3>&1 1>&2 2>&3)
+            NEW_PORT=$(whiptail --inputbox "Enter new port:" 8 60 "$(grep -E '"port"[[:space:]]*:' "$WEB_PANEL" | head -n1 | sed -E 's/.*"port"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/')" 3>&1 1>&2 2>&3)
+            NEW_REFRESH=$(whiptail --inputbox "Enter new monitoring refresh interval (seconds, min 0.5):" 8 60 "$(grep -E '"monitor_refresh"[[:space:]]*:' "$WEB_PANEL" | head -n1 | sed -E 's/.*"monitor_refresh"[[:space:]]*:[[:space:]]*([0-9.]+).*/\1/')" 3>&1 1>&2 2>&3)
+            if [ -n "$NEW_SECRET_KEY" ]; then
+                sudo sed -E -i 's/"secret_key"[[:space:]]*:[[:space:]]*"[^"]*"/"secret_key": "'"$NEW_SECRET_KEY"'"/' "$WEB_PANEL"
+                CONFIG["secret_key"]="$NEW_SECRET_KEY"
+                app.secret_key="$NEW_SECRET_KEY"
+            fi
+            if [[ "$NEW_PORT" =~ ^[0-9]+$ ]]; then
+                sudo sed -E -i 's/"port"[[:space:]]*:[[:space:]]*[0-9]+/"port": '"$NEW_PORT"'/' "$WEB_PANEL"
+                CONFIG["port"]=$NEW_PORT
+            fi
+            if [ -n "$NEW_REFRESH" ]; then
+                # Only update if value is at least 0.5
+                REF=$(echo "$NEW_REFRESH" | awk '{printf "%.1f",$0}')
+                if (( $(echo "$REF >= 0.5" | bc -l) )); then
+                    sudo sed -E -i 's/"monitor_refresh"[[:space:]]*:[[:space:]]*[0-9.]+/"monitor_refresh": '"$REF"'/' "$WEB_PANEL"
+                    CONFIG["monitor_refresh"]=$REF
+                fi
+            fi
+            whiptail --msgbox "App settings updated. (Port changes will take effect on restart.)" 8 50
+        fi
+        return redirect(url_for('settings'))
+    settings_template = """
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <title>Settings</title>
+      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+      <style>
+        .nav-tabs .nav-link { cursor: pointer; }
+      </style>
+    </head>
+    <body>
+      <div class="container py-4">
+        <h1>Settings</h1>
+        <ul class="nav nav-tabs" id="settingsTab" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="credentials-tab" data-bs-toggle="tab" data-bs-target="#credentials" type="button" role="tab" aria-controls="credentials" aria-selected="true">Credentials</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="app-settings-tab" data-bs-toggle="tab" data-bs-target="#app-settings" type="button" role="tab" aria-controls="app-settings" aria-selected="false">App Settings</button>
+          </li>
+        </ul>
+        <div class="tab-content" id="settingsTabContent">
+          <div class="tab-pane fade show active pt-3" id="credentials" role="tabpanel" aria-labelledby="credentials-tab">
+            <form method="post">
+              <div class="mb-3">
+                <label for="login" class="form-label">Login</label>
+                <input type="text" class="form-control" id="login" name="login" value="{{ config['login'] }}">
+              </div>
+              <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="text" class="form-control" id="password" name="password" value="{{ config['password'] }}">
+              </div>
+              <button type="submit" name="save_credentials" class="btn btn-primary">Save Credentials</button>
+            </form>
+          </div>
+          <div class="tab-pane fade pt-3" id="app-settings" role="tabpanel" aria-labelledby="app-settings-tab">
+            <form method="post">
+              <div class="mb-3">
+                <label for="secret_key" class="form-label">Secret Key</label>
+                <input type="text" class="form-control" id="secret_key" name="secret_key" value="{{ config['secret_key'] }}">
+              </div>
+              <div class="mb-3">
+                <label for="port" class="form-label">Port</label>
+                <input type="number" class="form-control" id="port" name="port" value="{{ config['port'] }}">
+              </div>
+              <div class="mb-3">
+                <label for="monitor_refresh" class="form-label">Monitoring Refresh Interval (seconds, min 0.5)</label>
+                <input type="number" step="0.1" class="form-control" id="monitor_refresh" name="monitor_refresh" value="{{ config['monitor_refresh'] }}">
+              </div>
+              <button type="submit" name="save_app_settings" class="btn btn-primary">Save App Settings</button>
+            </form>
+          </div>
+        </div>
+        <br>
+        <a href="{{ url_for('dir_listing', req_path='') }}" class="btn btn-secondary">Back to File Manager</a>
+      </div>
+      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+    </body>
+    </html>
+    """
+    return render_template_string(settings_template, config=CONFIG)
 
 # ------------------ File Editing Endpoint (within BASE_DIR) ------------------ #
 @app.route('/edit/<path:req_path>', methods=['GET', 'POST'])
@@ -404,7 +527,7 @@ def dir_listing(req_path):
       <style>
          canvas { max-width: 300px; max-height: 300px; }
          .progress { height: 40px; }
-         .progress-bar { color: black; font-size: 1.2em; }
+         .progress-bar { color: black; font-size: 1.2em; font-weight: bold; }
       </style>
     </head>
     <body>
@@ -413,6 +536,9 @@ def dir_listing(req_path):
         <div class="text-end mb-3">
           <a href="{{ url_for('edit_config') }}" class="btn btn-outline-warning">
             <i class="fas fa-edit"></i> Edit config.txt
+          </a>
+          <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-cog"></i> Settings
           </a>
         </div>
         {% with messages = get_flashed_messages() %}
@@ -609,7 +735,7 @@ def dir_listing(req_path):
       </div>
       
       <script>
-        // Update monitoring progress bars using plain Bootstrap progress bars
+        // Update monitoring progress bars using Bootstrap progress bars
         function updateMonitoring() {
           let sensorSelect = document.getElementById("ssd_sensor_select");
           let sensorParam = "";
@@ -634,12 +760,12 @@ def dir_listing(req_path):
               // Update additional text values
               document.getElementById("cpu-usage").textContent = data.cpu_usage;
               document.getElementById("disk-percent").textContent = data.disk_percent;
-              document.getElementById("mem-text").innerHTML = data.mem_percent + "% used (" + data.mem_used_human + " / " + data.mem_total_human + ")";
+              document.getElementById("mem-text").innerHTML = data.mem_percent + "% used (" + data.disk_used_human + " / " + data.disk_total_human + ")";
             })
             .catch(err => console.error("Error fetching /api/monitoring:", err));
         }
         document.addEventListener("DOMContentLoaded", function() {
-          setInterval(updateMonitoring, 500); // Refresh every 0.5 seconds
+          setInterval(updateMonitoring, {{ monitor_refresh * 1000 }}); // Refresh based on setting
         });
         // Handle file upload with progress bar via AJAX
         document.getElementById("uploadForm").addEventListener("submit", function(e) {
@@ -658,6 +784,7 @@ def dir_listing(req_path):
           });
           xhr.onload = function() {
             if (xhr.status === 200) {
+              alert("File(s) uploaded successfully.");
               window.location.reload();
             } else {
               alert("Error uploading file.");
@@ -671,7 +798,7 @@ def dir_listing(req_path):
     </html>
     """
     return render_template_string(html_template, files=files, req_path=req_path,
-                                  parent_path=parent_path, monitoring_info=monitoring_info)
+                                  parent_path=parent_path, monitoring_info=monitoring_info, monitor_refresh=CONFIG["monitor_refresh"])
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=CONFIG["port"], debug=True)
