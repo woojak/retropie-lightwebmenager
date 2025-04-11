@@ -72,7 +72,7 @@ PASSWORD = CONFIG["password"]
 # Base directory for file management
 BASE_DIR = os.path.abspath("/home/pi/RetroPie")
 
-# --- Jinja2 Filters ---
+# ------------------ Jinja2 Filters ------------------ #
 def format_datetime(value):
     return datetime.fromtimestamp(value).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -88,7 +88,7 @@ def format_filesize(value):
 app.jinja_env.filters['datetimeformat'] = format_datetime
 app.jinja_env.filters['filesizeformat'] = format_filesize
 
-# --- Authentication Functions ---
+# ------------------ Authentication Functions ------------------ #
 def check_auth(username, password):
     return username == CONFIG["login"] and password == CONFIG["password"]
 
@@ -113,7 +113,7 @@ def safe_path(path):
         abort(403)
     return abs_path
 
-# --- Helper Functions ---
+# ------------------ Helper Functions ------------------ #
 def round_1(x):
     return round(x, 1)
 
@@ -188,7 +188,7 @@ def get_monitoring_data(selected_sensor=None):
         'ssd_temp': ssd_selected_temp
     }
 
-# --- Monitoring API Endpoint ---
+# ------------------ Monitoring API Endpoint ------------------ #
 @app.route('/api/monitoring')
 @requires_auth
 def api_monitoring():
@@ -208,7 +208,7 @@ def api_monitoring():
     }
     return jsonify(response)
 
-# --- Control Endpoint ---
+# ------------------ Control Endpoint ------------------ #
 @app.route('/control', methods=['POST'])
 @requires_auth
 def control():
@@ -223,7 +223,7 @@ def control():
         flash("Invalid action.")
     return redirect(url_for('dir_listing', req_path=""))
 
-# --- Settings Endpoint ---
+# ------------------ Settings Endpoint ------------------ #
 @app.route('/settings', methods=['GET', 'POST'])
 @requires_auth
 def settings():
@@ -422,7 +422,7 @@ def edit_config():
     <html lang="en">
     <head>
       <meta charset="utf-8">
-      <title>Edit RPI config</title>
+      <title>Edit config.txt</title>
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
     </head>
     <body>
@@ -546,17 +546,7 @@ def dir_listing(req_path):
         return f"Directory or file does not exist: {req_path}", 404
     if os.path.isfile(abs_path):
         return send_from_directory(os.path.dirname(abs_path), os.path.basename(abs_path), as_attachment=True)
-
-    # Process the selected SSD sensor.
     selected_sensor = request.args.get('ssd_sensor', None)
-    sensor_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "selected_sensor.txt")
-    if selected_sensor:
-        with open(sensor_file, "w") as sf:
-            sf.write(selected_sensor)
-    else:
-        if os.path.exists(sensor_file):
-            selected_sensor = open(sensor_file, "r").read().strip()
-
     monitoring_info = get_monitoring_data(selected_sensor)
     files = []
     try:
@@ -592,7 +582,7 @@ def dir_listing(req_path):
     <html lang="en">
     <head>
       <meta charset="utf-8">
-      <title>RetroPie Light Web Game Manager</title>
+      <title>File Manager Panel</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
       <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -604,7 +594,7 @@ def dir_listing(req_path):
     </head>
     <body>
       <div class="container py-4">
-        <h1 class="mb-4">RetroPie Light Web Game Manager</h1>
+        <h1 class="mb-4">File Manager Panel</h1>
         <div class="text-end mb-3">
           <a href="{{ url_for('edit_config') }}" class="btn btn-outline-warning">
             <i class="fas fa-edit"></i> Edit config.txt
@@ -848,7 +838,6 @@ def dir_listing(req_path):
         document.addEventListener("DOMContentLoaded", function() {
           setInterval(updateMonitoring, {{ monitor_refresh * 1000 }});
         });
-        // Handle file upload with progress bar via AJAX
         document.getElementById("uploadForm").addEventListener("submit", function(e) {
           e.preventDefault();
           var form = this;
