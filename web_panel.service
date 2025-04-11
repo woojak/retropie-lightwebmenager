@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
+User=root
 WorkingDirectory=/home/pi/retropie_lwgmenager
 ExecStart=/usr/bin/python3 /home/pi/retropie_lwgmenager/web_panel.py
 Environment=TMPDIR=/home/pi/tmp

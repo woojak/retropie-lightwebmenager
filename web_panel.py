@@ -20,7 +20,8 @@ def load_config():
         "password": "mawerik1",
         "secret_key": "your_secret_key",
         "port": 5000,
-        "monitor_refresh": 0.5
+        "monitor_refresh": 0.5,
+        "ssd_sensor": ""  # Save the selected SSD sensor here
     }
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
@@ -49,9 +50,15 @@ def load_config():
     return config
 
 def save_config(config):
-    with open(CONFIG_FILE, "w") as f:
-        for key, val in config.items():
-            f.write(f"{key}={val}\n")
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            for key, val in config.items():
+                f.write(f"{key}={val}\n")
+    except PermissionError:
+        os.chmod(CONFIG_FILE, 0o666)
+        with open(CONFIG_FILE, "w") as f:
+            for key, val in config.items():
+                f.write(f"{key}={val}\n")
 
 CONFIG = load_config()
 
@@ -142,7 +149,7 @@ def get_ssd_temperatures():
                 parts = line.split(":")
                 if len(parts) >= 2:
                     sensor_name = parts[0].strip()
-                    temp_str = parts[1].strip()  # e.g., "28 C (301 K)"
+                    temp_str = parts[1].strip()
                     tokens = temp_str.split()
                     if tokens:
                         raw_val = tokens[0].lower().replace("°c", "").replace("c", "").strip()
@@ -155,6 +162,9 @@ def get_ssd_temperatures():
         return {}
 
 def get_monitoring_data(selected_sensor=None):
+    # If no sensor is provided, use the stored one
+    if selected_sensor is None:
+        selected_sensor = CONFIG.get("ssd_sensor")
     cpu_usage = round_1(psutil.cpu_percent(interval=0.0))
     mem = psutil.virtual_memory()
     mem_percent = round_1(mem.percent)
@@ -192,8 +202,11 @@ def get_monitoring_data(selected_sensor=None):
 @app.route('/api/monitoring')
 @requires_auth
 def api_monitoring():
-    selected_sensor = request.args.get('ssd_sensor', None)
-    mon = get_monitoring_data(selected_sensor)
+    # Use GET parameter if provided; otherwise use stored sensor
+    req_sensor = request.args.get('ssd_sensor')
+    if not req_sensor:
+        req_sensor = CONFIG.get("ssd_sensor")
+    mon = get_monitoring_data(req_sensor)
     response = {
         'cpu_usage': mon['cpu_usage'],
         'cpu_temp': mon['cpu_temp'],
@@ -265,6 +278,9 @@ def settings():
         elif 'disable_service' in request.form:
             subprocess.call(["systemctl", "disable", "web_panel.service"])
             message += "Service disabled. "
+        elif 'stop_service' in request.form:
+            subprocess.call(["systemctl", "stop", "web_panel.service"])
+            message += "Service stopped. "
         save_config(CONFIG)
         flash(message)
         return redirect(url_for('settings'))
@@ -282,6 +298,14 @@ def settings():
     <body>
       <div class="container py-4">
         <h1>Settings</h1>
+        <!-- Flash messages for Settings page -->
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for msg in messages %}
+              <div class="alert alert-info" role="alert">{{ msg }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
         <ul class="nav nav-tabs" id="settingsTab" role="tablist">
           <li class="nav-item" role="presentation">
             <button class="nav-link active" id="credentials-tab" data-bs-toggle="tab" data-bs-target="#credentials" type="button" role="tab" aria-controls="credentials" aria-selected="true">Credentials</button>
@@ -328,6 +352,9 @@ def settings():
             <form method="post">
               <div class="mb-3">
                 <button type="submit" name="restart_service" class="btn btn-warning mb-2">Restart Service</button>
+              </div>
+              <div class="mb-3">
+                <button type="submit" name="stop_service" class="btn btn-danger mb-2">Stop Service</button>
               </div>
               <div class="mb-3">
                 <button type="submit" name="enable_service" class="btn btn-success mb-2">Enable Service</button>
@@ -541,13 +568,19 @@ def delete_folder(req_path):
 @app.route('/<path:req_path>')
 @requires_auth
 def dir_listing(req_path):
+    # If an SSD sensor is selected via GET parameter, update config
+    selected_sensor_param = request.args.get('ssd_sensor')
+    if selected_sensor_param:
+        CONFIG['ssd_sensor'] = selected_sensor_param
+        save_config(CONFIG)
     abs_path = safe_path(req_path)
     if not os.path.exists(abs_path):
         return f"Directory or file does not exist: {req_path}", 404
     if os.path.isfile(abs_path):
         return send_from_directory(os.path.dirname(abs_path), os.path.basename(abs_path), as_attachment=True)
-    selected_sensor = request.args.get('ssd_sensor', None)
-    monitoring_info = get_monitoring_data(selected_sensor)
+    # Use stored sensor if not provided explicitly
+    current_sensor = request.args.get('ssd_sensor', CONFIG.get("ssd_sensor"))
+    monitoring_info = get_monitoring_data(current_sensor)
     files = []
     try:
         for filename in os.listdir(abs_path):
@@ -814,7 +847,7 @@ def dir_listing(req_path):
         function updateMonitoring() {
           let sensorSelect = document.getElementById("ssd_sensor_select");
           let sensorParam = "";
-          if(sensorSelect) { sensorParam = "&ssd_sensor=" + sensorSelect.value; }
+          if (sensorSelect) { sensorParam = "&ssd_sensor=" + sensorSelect.value; }
           fetch("/api/monitoring?" + sensorParam)
             .then(response => response.json())
             .then(data => {
@@ -838,6 +871,7 @@ def dir_listing(req_path):
         document.addEventListener("DOMContentLoaded", function() {
           setInterval(updateMonitoring, {{ monitor_refresh * 1000 }});
         });
+        // Handle file upload with progress bar via AJAX
         document.getElementById("uploadForm").addEventListener("submit", function(e) {
           e.preventDefault();
           var form = this;
