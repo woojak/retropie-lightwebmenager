@@ -162,7 +162,7 @@ def get_ssd_temperatures():
         return {}
 
 def get_monitoring_data(selected_sensor=None):
-    # If no sensor is provided, use the stored one
+    # If no sensor is provided, use the stored sensor
     if selected_sensor is None:
         selected_sensor = CONFIG.get("ssd_sensor")
     cpu_usage = round_1(psutil.cpu_percent(interval=0.0))
@@ -183,6 +183,18 @@ def get_monitoring_data(selected_sensor=None):
         else:
             ssd_selected_name = list(ssd_temps.keys())[0]
             ssd_selected_temp = ssd_temps[ssd_selected_name]
+
+    # Calculate system uptime
+    boot_time = psutil.boot_time()
+    uptime_td = datetime.now() - datetime.fromtimestamp(boot_time)
+    days = uptime_td.days
+    hours, rem = divmod(uptime_td.seconds, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if days > 0:
+        uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
+    else:
+        uptime_str = f"{hours}h {minutes}m {seconds}s"
+
     return {
         'cpu_usage': cpu_usage,
         'cpu_temp': cpu_temp,
@@ -195,14 +207,14 @@ def get_monitoring_data(selected_sensor=None):
         'disk_percent': disk_percent,
         'ssd_all': ssd_temps,
         'ssd_selected_name': ssd_selected_name,
-        'ssd_temp': ssd_selected_temp
+        'ssd_temp': ssd_selected_temp,
+        'uptime': uptime_str
     }
 
 # ------------------ Monitoring API Endpoint ------------------ #
 @app.route('/api/monitoring')
 @requires_auth
 def api_monitoring():
-    # Use GET parameter if provided; otherwise use stored sensor
     req_sensor = request.args.get('ssd_sensor')
     if not req_sensor:
         req_sensor = CONFIG.get("ssd_sensor")
@@ -217,7 +229,8 @@ def api_monitoring():
         'disk_free_human': format_filesize(mon['disk_free']),
         'ssd_temp': mon['ssd_temp'],
         'ssd_selected_name': mon['ssd_selected_name'],
-        'ssd_all': mon['ssd_all']
+        'ssd_all': mon['ssd_all'],
+        'uptime': mon['uptime']
     }
     return jsonify(response)
 
@@ -568,7 +581,7 @@ def delete_folder(req_path):
 @app.route('/<path:req_path>')
 @requires_auth
 def dir_listing(req_path):
-    # If an SSD sensor is selected via GET parameter, update config
+    # If an SSD sensor is selected via GET, update config
     selected_sensor_param = request.args.get('ssd_sensor')
     if selected_sensor_param:
         CONFIG['ssd_sensor'] = selected_sensor_param
@@ -651,10 +664,12 @@ def dir_listing(req_path):
           </div>
           <div class="card-body">
             <div class="row mb-3">
+              <!-- CPU Temp -->
               <div class="col-md-3">
                 <strong>CPU Temp:</strong>
                 <span id="cpu-temp">{{ monitoring_info.cpu_temp }}</span>
               </div>
+              <!-- SSD Temp -->
               <div class="col-md-3">
                 <strong>SSD Temp:</strong>
                 <span id="ssd-temp">{{ monitoring_info.ssd_temp }}</span>
@@ -662,12 +677,18 @@ def dir_listing(req_path):
                   <br><small>{{ monitoring_info.ssd_selected_name }}</small>
                 {% endif %}
               </div>
-              <div class="col-md-6">
+              <!-- Uptime -->
+              <div class="col-md-3">
+                <strong>Uptime:</strong>
+                <span>{{ monitoring_info.uptime }}</span>
+              </div>
+              <!-- SSD Sensor Selection -->
+              <div class="col-md-3">
                 {% if monitoring_info.ssd_all %}
-                  <form method="get" class="d-flex align-items-center">
-                    <label for="ssd_sensor_select" class="me-2"><small>Select SSD Sensor:</small></label>
+                  <form method="get" class="d-flex align-items-center flex-wrap">
+                    <label for="ssd_sensor_select" class="me-2 mb-1"><small>Select SSD Sensor:</small></label>
                     <input type="hidden" name="req_path" value="{{ req_path }}">
-                    <select name="ssd_sensor" id="ssd_sensor_select" class="form-select" style="width:auto;" onchange="this.form.submit()">
+                    <select name="ssd_sensor" id="ssd_sensor_select" class="form-select" style="max-width: 200px;" onchange="this.form.submit()">
                       {% for sensor, temp in monitoring_info.ssd_all.items() %}
                         <option value="{{ sensor }}" {% if sensor == monitoring_info.ssd_selected_name %}selected{% endif %}>{{ sensor }}: {{ temp }}</option>
                       {% endfor %}
@@ -690,7 +711,9 @@ def dir_listing(req_path):
                 </div>
               </div>
               <div class="col-md-4">
-                <div class="mb-1"><strong>Disk Usage:</strong> ({{ monitoring_info.disk_used | filesizeformat }} used / {{ monitoring_info.disk_total | filesizeformat }} total)</div>
+                <div class="mb-1">
+                  <strong>Disk Usage:</strong> ({{ monitoring_info.disk_used | filesizeformat }} used / {{ monitoring_info.disk_total | filesizeformat }} total)
+                </div>
                 <div class="progress">
                   <div id="diskBar" class="progress-bar bg-info" role="progressbar" style="width: {{ monitoring_info.disk_percent }}%;" aria-valuenow="{{ monitoring_info.disk_percent }}" aria-valuemin="0" aria-valuemax="100">{{ monitoring_info.disk_percent }}%</div>
                 </div>
@@ -901,8 +924,12 @@ def dir_listing(req_path):
     </body>
     </html>
     """
-    return render_template_string(html_template, files=files, req_path=req_path,
-                                  parent_path=parent_path, monitoring_info=monitoring_info, monitor_refresh=CONFIG["monitor_refresh"])
+    return render_template_string(html_template,
+                                  files=files,
+                                  req_path=req_path,
+                                  parent_path=parent_path,
+                                  monitoring_info=monitoring_info,
+                                  monitor_refresh=CONFIG["monitor_refresh"])
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=CONFIG["port"], debug=True)
