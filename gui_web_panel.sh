@@ -1,121 +1,214 @@
 #!/bin/bash
-# gui_web_panel.sh
-# This script provides a text-based graphical interface (using whiptail)
-# for managing the web panel. It allows modification of credentials, app settings,
-# service control, and also lets you run the uninstall.sh and install.sh scripts.
-# The web_panel.py file is assumed to be located in /home/pi/retropie-lightwebmenager
+# gui_web_panel.sh - SSH GUI for RetroPie Light Web Manager
+# This script provides a clear, menu-driven interface (using whiptail)
+# to update configuration (stored in config.cfg), as well as to enable,
+# disable, and restart the web panel service.
+# All project files should be in the same folder (e.g., /home/pi/retropie_lwgmenager).
 
-# Define paths
-BASE_DIR="/home/pi/retropie-lwgmenager"
-WEB_PANEL="$BASE_DIR/web_panel.py"
-SERVICE_NAME="web_panel.service"
-UNINSTALL_SCRIPT="$BASE_DIR/uninstall.sh"
-INSTALL_SCRIPT="$BASE_DIR/install.sh"
+# Check if whiptail is installed
+if ! command -v whiptail >/dev/null 2>&1; then
+  echo "whiptail is not installed. Installing..."
+  sudo apt-get update && sudo apt-get install -y whiptail
+fi
 
-# Function: Modify Credentials (Login and Password)
-modify_credentials(){
-    NEW_LOGIN=$(whiptail --inputbox "Enter new login:" 8 60 "$(grep '\"login\"' "$WEB_PANEL" | head -n1 | cut -d'"' -f4)" 3>&1 1>&2 2>&3)
-    NEW_PASSWORD=$(whiptail --inputbox "Enter new password:" 8 60 "$(grep '\"password\"' "$WEB_PANEL" | head -n1 | cut -d'"' -f4)" 3>&1 1>&2 2>&3)
-    if [ -n "$NEW_LOGIN" ]; then
-        sed -i 's/"login": "[^"]*"/"login": "'"$NEW_LOGIN"'"/' "$WEB_PANEL"
+# Path to configuration file
+CONFIG_FILE="config.cfg"
+
+# Load configuration into an associative array CONFIG
+declare -A CONFIG
+if [ -f "$CONFIG_FILE" ]; then
+  while IFS='=' read -r key value; do
+    if [[ ! "$key" =~ ^# ]] && [ -n "$key" ]; then
+      CONFIG["$key"]="$value"
     fi
-    if [ -n "$NEW_PASSWORD" ]; then
-        sed -i 's/"password": "[^"]*"/"password": "'"$NEW_PASSWORD"'"/' "$WEB_PANEL"
-    fi
-    whiptail --msgbox "Credentials updated." 8 40
+  done < "$CONFIG_FILE"
+else
+  echo "Config file not found. Creating default config."
+  cat <<EOF > "$CONFIG_FILE"
+login=admin
+password=mawerik1
+secret_key=your_secret_key
+port=5000
+monitor_refresh=0.5
+EOF
+  CONFIG["login"]="admin"
+  CONFIG["password"]="mawerik1"
+  CONFIG["secret_key"]="your_secret_key"
+  CONFIG["port"]="5000"
+  CONFIG["monitor_refresh"]="0.5"
+fi
+
+# Function to save the configuration back to config.cfg
+save_config() {
+  cat <<EOF > "$CONFIG_FILE"
+login=${CONFIG[login]}
+password=${CONFIG[password]}
+secret_key=${CONFIG[secret_key]}
+port=${CONFIG[port]}
+monitor_refresh=${CONFIG[monitor_refresh]}
+EOF
 }
 
-# Function: Modify App Settings (Secret Key, Port, Refresh Interval)
-modify_app_settings(){
-    NEW_SECRET_KEY=$(whiptail --inputbox "Enter new secret key:" 8 60 "$(grep '\"secret_key\"' "$WEB_PANEL" | head -n1 | cut -d'"' -f4)" 3>&1 1>&2 2>&3)
-    NEW_PORT=$(whiptail --inputbox "Enter new port:" 8 60 "$(grep '\"port\"' "$WEB_PANEL" | head -n1 | cut -d: -f2 | sed 's/[ ,]//g')" 3>&1 1>&2 2>&3)
-    NEW_REFRESH=$(whiptail --inputbox "Enter new monitoring refresh interval (seconds, min 0.5):" 8 60 "$(grep '\"monitor_refresh\"' "$WEB_PANEL" | head -n1 | cut -d: -f2 | sed 's/[ ,]//g')" 3>&1 1>&2 2>&3)
-    if [ -n "$NEW_SECRET_KEY" ]; then
-        sed -i 's/"secret_key": "[^"]*"/"secret_key": "'"$NEW_SECRET_KEY"'"/' "$WEB_PANEL"
-    fi
-    if [[ "$NEW_PORT" =~ ^[0-9]+$ ]]; then
-        sed -i 's/"port": [0-9]\+/"port": '"$NEW_PORT"'/' "$WEB_PANEL"
-    fi
-    if [ -n "$NEW_REFRESH" ]; then
-        sed -i 's/"monitor_refresh": [0-9.]\+/"monitor_refresh": '"$NEW_REFRESH"'/' "$WEB_PANEL"
-    fi
-    whiptail --msgbox "App settings updated. (Port changes will take effect on restart.)" 8 50
+# Function: Configure Credentials Menu
+configure_credentials() {
+  while true; do
+    CHOICE=$(whiptail --title "Configure Credentials" --menu "Current Credentials:\nLogin: ${CONFIG[login]}\nPassword: ${CONFIG[password]}" 15 60 3 \
+      "1" "Change Login (Current: ${CONFIG[login]})" \
+      "2" "Change Password (Current: ${CONFIG[password]})" \
+      "3" "Back" 3>&1 1>&2 2>&3)
+    case $CHOICE in
+      "1")
+        NEW_LOGIN=$(whiptail --inputbox "Enter new login:" 8 60 "${CONFIG[login]}" 3>&1 1>&2 2>&3)
+        if [ -n "$NEW_LOGIN" ]; then
+          CONFIG[login]="$NEW_LOGIN"
+          save_config
+          whiptail --msgbox "Login updated to: ${CONFIG[login]}" 8 40
+        fi
+        ;;
+      "2")
+        NEW_PASSWORD=$(whiptail --inputbox "Enter new password:" 8 60 "${CONFIG[password]}" 3>&1 1>&2 2>&3)
+        if [ -n "$NEW_PASSWORD" ]; then
+          CONFIG[password]="$NEW_PASSWORD"
+          save_config
+          whiptail --msgbox "Password updated to: ${CONFIG[password]}" 8 40
+        fi
+        ;;
+      "3")
+        break
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
 }
 
-# Function: Service Control Menu
-service_control(){
-    CHOICE=$(whiptail --title "Service Control" --menu "Choose an action:" 15 60 4 \
+# Function: Configure App Settings Menu
+configure_app_settings() {
+  while true; do
+    CHOICE=$(whiptail --title "Configure App Settings" --menu "Current App Settings:\nSecret Key: ${CONFIG[secret_key]}\nPort: ${CONFIG[port]}\nMonitor Refresh: ${CONFIG[monitor_refresh]} sec" 18 60 4 \
+      "1" "Change Secret Key (Current: ${CONFIG[secret_key]})" \
+      "2" "Change Port (Current: ${CONFIG[port]})" \
+      "3" "Change Monitor Refresh Interval (Current: ${CONFIG[monitor_refresh]} sec)" \
+      "4" "Back" 3>&1 1>&2 2>&3)
+    case $CHOICE in
+      "1")
+        NEW_SECRET=$(whiptail --inputbox "Enter new secret key:" 8 60 "${CONFIG[secret_key]}" 3>&1 1>&2 2>&3)
+        if [ -n "$NEW_SECRET" ]; then
+          CONFIG[secret_key]="$NEW_SECRET"
+          save_config
+          whiptail --msgbox "Secret key updated to: ${CONFIG[secret_key]}" 8 40
+        fi
+        ;;
+      "2")
+        NEW_PORT=$(whiptail --inputbox "Enter new port:" 8 60 "${CONFIG[port]}" 3>&1 1>&2 2>&3)
+        if [[ "$NEW_PORT" =~ ^[0-9]+$ ]]; then
+          CONFIG[port]="$NEW_PORT"
+          save_config
+          whiptail --msgbox "Port updated to: ${CONFIG[port]}" 8 40
+        else
+          whiptail --msgbox "Invalid port value." 8 40
+        fi
+        ;;
+      "3")
+        NEW_REFRESH=$(whiptail --inputbox "Enter new refresh interval (sec, min 0.5):" 8 60 "${CONFIG[monitor_refresh]}" 3>&1 1>&2 2>&3)
+        if [[ "$NEW_REFRESH" =~ ^[0-9]+(\.[0-9]+)?$ ]] && (( $(echo "$NEW_REFRESH >= 0.5" | bc -l) )); then
+          CONFIG[monitor_refresh]="$NEW_REFRESH"
+          save_config
+          whiptail --msgbox "Monitor refresh updated to: ${CONFIG[monitor_refresh]} sec" 8 40
+        else
+          whiptail --msgbox "Invalid refresh value. Minimum is 0.5 sec." 8 40
+        fi
+        ;;
+      "4")
+        break
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+}
+
+# Function: Service Management Menu (Enable/Disable/Restart Service)
+manage_service() {
+  while true; do
+    CHOICE=$(whiptail --title "Service Management" --menu "Current Service Status:\n(Use this menu to manage the web panel service)" 15 60 4 \
       "1" "Restart Service" \
       "2" "Enable Service" \
-      "3" "Disable Service" 3>&1 1>&2 2>&3)
-    if [ $? -ne 0 ]; then
-        return
-    fi
+      "3" "Disable Service" \
+      "4" "Back" 3>&1 1>&2 2>&3)
     case $CHOICE in
-        "1")
-            systemctl restart $SERVICE_NAME
-            whiptail --msgbox "Service restarted." 8 40
-            ;;
-        "2")
-            systemctl enable $SERVICE_NAME
-            whiptail --msgbox "Service enabled." 8 40
-            ;;
-        "3")
-            systemctl disable $SERVICE_NAME
-            whiptail --msgbox "Service disabled." 8 40
-            ;;
+      "1")
+        sudo systemctl restart web_panel.service
+        whiptail --msgbox "Service restarted." 8 40
+        ;;
+      "2")
+        sudo systemctl enable web_panel.service
+        whiptail --msgbox "Service enabled." 8 40
+        ;;
+      "3")
+        sudo systemctl disable web_panel.service
+        whiptail --msgbox "Service disabled." 8 40
+        ;;
+      "4")
+        break
+        ;;
+      *)
+        break
+        ;;
     esac
-}
-
-# Function: Run Uninstall Script
-run_uninstall(){
-    if [ -f "$UNINSTALL_SCRIPT" ]; then
-        bash "$UNINSTALL_SCRIPT"
-    else
-        whiptail --msgbox "Uninstall script not found." 8 40
-    fi
+  done
 }
 
 # Function: Run Install Script
-run_install(){
-    if [ -f "$INSTALL_SCRIPT" ]; then
-        bash "$INSTALL_SCRIPT"
-    else
-        whiptail --msgbox "Install script not found." 8 40
-    fi
+run_install_script() {
+  if [ -x "./install.sh" ]; then
+    sudo ./install.sh
+  else
+    whiptail --msgbox "install.sh not found or not executable." 8 40
+  fi
+}
+
+# Function: Run Uninstall Script
+run_uninstall_script() {
+  if [ -x "./uninstall.sh" ]; then
+    sudo ./uninstall.sh
+  else
+    whiptail --msgbox "uninstall.sh not found or not executable." 8 40
+  fi
 }
 
 # Main Menu Loop
 while true; do
-    OPTION=$(whiptail --title "Web Panel Manager" --menu "Select an option:" 20 80 7 \
-        "1" "Modify Credentials (Login/Password)" \
-        "2" "Modify App Settings (Secret Key, Port, Refresh Interval)" \
-        "3" "Service Control (Restart/Enable/Disable)" \
-        "4" "Run Uninstall Script" \
-        "5" "Run Install Script" \
-        "6" "Exit" 3>&1 1>&2 2>&3)
-    RETVAL=$?
-    if [ $RETVAL -ne 0 ]; then
-        exit 0
-    fi
-    case $OPTION in
-        "1")
-            modify_credentials
-            ;;
-        "2")
-            modify_app_settings
-            ;;
-        "3")
-            service_control
-            ;;
-        "4")
-            run_uninstall
-            ;;
-        "5")
-            run_install
-            ;;
-        "6")
-            exit 0
-            ;;
-    esac
+  CHOICE=$(whiptail --title "RetroPie Light Web Manager" --menu "Select an option:" 20 70 6 \
+    "1" "Configure Credentials" \
+    "2" "Configure App Settings" \
+    "3" "Service Management" \
+    "4" "Run Install Script" \
+    "5" "Run Uninstall Script" \
+    "6" "Exit" 3>&1 1>&2 2>&3)
+  case $CHOICE in
+    "1")
+      configure_credentials
+      ;;
+    "2")
+      configure_app_settings
+      ;;
+    "3")
+      manage_service
+      ;;
+    "4")
+      run_install_script
+      ;;
+    "5")
+      run_uninstall_script
+      ;;
+    "6")
+      exit 0
+      ;;
+    *)
+      exit 0
+      ;;
+  esac
 done
