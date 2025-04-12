@@ -14,7 +14,7 @@ from werkzeug.utils import secure_filename
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.cfg")
 
 def load_config():
-    # Default configuration values, including the new optional "show_nvme" setting
+    # Default configuration values, including the new "config_location" option
     config = {
         "login": "admin",
         "password": "mawerik1",
@@ -22,7 +22,8 @@ def load_config():
         "port": 5000,
         "monitor_refresh": 0.5,
         "ssd_sensor": "",
-        "show_nvme": False
+        "show_nvme": False,
+        "config_location": "64"  # Default: config on 64-bit system (/boot/firmware/config.txt)
     }
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
@@ -146,7 +147,7 @@ def get_cpu_temp():
             return "N/A"
 
 def get_ssd_temperatures():
-    # Only perform NVMe temperature reading if the option is enabled
+    # Only perform NVMe temperature reading if enabled in the config
     if not CONFIG.get("show_nvme"):
         return {}
     sensors = {}
@@ -174,7 +175,7 @@ def get_ssd_temperatures():
         return {}
 
 def get_monitoring_data(selected_sensor=None):
-    # Use stored sensor if no sensor is provided
+    # Use the saved sensor if no sensor provided
     if selected_sensor is None:
         selected_sensor = CONFIG.get("ssd_sensor")
     cpu_usage = round_1(psutil.cpu_percent(interval=0.0))
@@ -195,6 +196,18 @@ def get_monitoring_data(selected_sensor=None):
         else:
             ssd_selected_name = list(ssd_temps.keys())[0]
             ssd_selected_temp = ssd_temps[ssd_selected_name]
+    # Get CPU frequency information
+    try:
+        freq = psutil.cpu_freq()
+        if freq is not None:
+            cpu_freq_current = round_1(freq.current)
+            cpu_freq_max = round_1(freq.max)
+        else:
+            cpu_freq_current = 0
+            cpu_freq_max = 0
+    except Exception:
+        cpu_freq_current = "N/A"
+        cpu_freq_max = "N/A"
     # Calculate system uptime
     boot_time = psutil.boot_time()
     uptime_td = datetime.now() - datetime.fromtimestamp(boot_time)
@@ -209,6 +222,8 @@ def get_monitoring_data(selected_sensor=None):
     return {
         'cpu_usage': cpu_usage,
         'cpu_temp': cpu_temp,
+        'cpu_freq_current': cpu_freq_current,
+        'cpu_freq_max': cpu_freq_max,
         'mem_total': mem.total,
         'mem_used': mem.used,
         'mem_percent': mem_percent,
@@ -233,7 +248,11 @@ def api_monitoring():
     response = {
         'cpu_usage': mon['cpu_usage'],
         'cpu_temp': mon['cpu_temp'],
+        'cpu_freq_current': mon['cpu_freq_current'],
+        'cpu_freq_max': mon['cpu_freq_max'],
         'mem_percent': mon['mem_percent'],
+        'mem_used_human': format_filesize(mon['mem_used']),
+        'mem_total_human': format_filesize(mon['mem_total']),
         'disk_percent': mon['disk_percent'],
         'disk_used_human': format_filesize(mon['disk_used']),
         'disk_total_human': format_filesize(mon['disk_total']),
@@ -251,11 +270,11 @@ def api_monitoring():
 def control():
     action = request.form.get("action")
     if action == "reboot":
-        flash("Rebooting Raspberry Pi ended with success.")
-        subprocess.call(["reboot"])
+        flash("Rebooting Raspberry Pi successfully.")
+        subprocess.Popen(["reboot"])
     elif action == "shutdown":
         flash("Shutting down Raspberry Pi...")
-        subprocess.call(["shutdown", "now"])
+        subprocess.Popen(["shutdown", "now"])
     else:
         flash("Invalid action.")
     return redirect(url_for('dir_listing', req_path=""))
@@ -281,8 +300,9 @@ def settings():
             new_secret_key = request.form.get('secret_key', '').strip()
             new_port = request.form.get('port', '').strip()
             new_refresh = request.form.get('monitor_refresh', '').strip()
-            # Update our new optional setting for NVMe temperature display
             CONFIG['show_nvme'] = (request.form.get('show_nvme') == 'on')
+            new_config_location = request.form.get('config_location', '64').strip()
+            CONFIG['config_location'] = new_config_location
             if new_secret_key:
                 CONFIG['secret_key'] = new_secret_key
                 app.secret_key = new_secret_key
@@ -324,7 +344,6 @@ def settings():
     <body>
       <div class="container py-4">
         <h1>Settings</h1>
-        <!-- Flash messages for Settings page -->
         {% with messages = get_flashed_messages() %}
           {% if messages %}
             {% for msg in messages %}
@@ -374,6 +393,13 @@ def settings():
               <div class="form-check mb-3">
                 <input class="form-check-input" type="checkbox" id="show_nvme" name="show_nvme" {% if config['show_nvme'] %}checked{% endif %}>
                 <label class="form-check-label" for="show_nvme">Display NVMe Temperature</label>
+              </div>
+              <div class="mb-3">
+                <label for="config_location" class="form-label">Config File Location</label>
+                <select name="config_location" id="config_location" class="form-select">
+                  <option value="64" {% if config['config_location'] == '64' %}selected{% endif %}>Config on 64-bit system (/boot/firmware/config.txt)</option>
+                  <option value="32" {% if config['config_location'] == '32' %}selected{% endif %}>Config on 32-bit system (/boot/config.txt)</option>
+                </select>
               </div>
               <button type="submit" name="save_app_settings" class="btn btn-primary">Save App Settings</button>
             </form>
@@ -454,17 +480,21 @@ def edit_file(req_path):
         return render_template_string(edit_template, filename=os.path.basename(abs_path),
                                       content=content, parent_path=posixpath.dirname(req_path))
 
-# ------------------ Endpoint for Editing /boot/firmware/config.txt ------------------ #
+# ------------------ Endpoint for Editing config.txt ------------------ #
 @app.route('/edit_config', methods=['GET', 'POST'])
 @requires_auth
 def edit_config():
-    config_path = '/boot/firmware/config.txt'
+    # Choose the configuration file location based on the setting in config.cfg
+    if CONFIG.get("config_location") == "32":
+        config_path = '/boot/config.txt'
+    else:
+        config_path = '/boot/firmware/config.txt'
     if request.method == 'POST':
         new_content = request.form.get('content', '')
         try:
             with open(config_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
-            flash("RPI config.txt has been updated.")
+            flash(f"RPI config.txt at {config_path} has been updated.")
             return redirect(url_for('dir_listing', req_path=''))
         except Exception as e:
             flash(f"Error saving RPI config.txt: {e}")
@@ -472,7 +502,7 @@ def edit_config():
         with open(config_path, 'r', encoding='utf-8') as f:
             content = f.read()
     except Exception as e:
-        flash(f"Error reading RPI config.txt: {e}")
+        flash(f"Error reading RPI config.txt check app setings: {e}")
         return redirect(url_for('dir_listing', req_path=''))
     edit_template = """
     <!doctype html>
@@ -484,7 +514,7 @@ def edit_config():
     </head>
     <body>
       <div class="container py-4">
-        <h1>Edit RPI config.txt</h1>
+        <h1>Edit RPI config.txt at {{ config_path }}</h1>
         <form method="post">
           <div class="mb-3">
             <textarea name="content" class="form-control" rows="20">{{ content }}</textarea>
@@ -497,7 +527,7 @@ def edit_config():
     </body>
     </html>
     """
-    return render_template_string(edit_template, content=content)
+    return render_template_string(edit_template, content=content, config_path=config_path)
 
 # ------------------ Bulk Delete Endpoint ------------------ #
 @app.route('/delete_bulk', methods=['POST'])
@@ -598,7 +628,7 @@ def delete_folder(req_path):
 @app.route('/<path:req_path>')
 @requires_auth
 def dir_listing(req_path):
-    # If an SSD sensor is selected via GET, update config
+    # If a new SSD sensor is selected via GET, update the config file
     selected_sensor_param = request.args.get('ssd_sensor')
     if selected_sensor_param:
         CONFIG['ssd_sensor'] = selected_sensor_param
@@ -608,7 +638,6 @@ def dir_listing(req_path):
         return f"Directory or file does not exist: {req_path}", 404
     if os.path.isfile(abs_path):
         return send_from_directory(os.path.dirname(abs_path), os.path.basename(abs_path), as_attachment=True)
-    # Use stored sensor if not provided explicitly
     current_sensor = request.args.get('ssd_sensor', CONFIG.get("ssd_sensor"))
     monitoring_info = get_monitoring_data(current_sensor)
     files = []
@@ -681,12 +710,12 @@ def dir_listing(req_path):
           </div>
           <div class="card-body">
             <div class="row mb-3">
-              <!-- CPU Temp -->
+              <!-- CPU Temperature -->
               <div class="col-md-3">
                 <strong>CPU Temp:</strong>
                 <span id="cpu-temp">{{ monitoring_info.cpu_temp }}</span>
               </div>
-              <!-- SSD Temp -->
+              <!-- SSD Temperature -->
               <div class="col-md-3">
                 <strong>SSD Temp:</strong>
                 <span id="ssd-temp">{{ monitoring_info.ssd_temp }}</span>
@@ -697,9 +726,9 @@ def dir_listing(req_path):
               <!-- Uptime -->
               <div class="col-md-3">
                 <strong>Uptime:</strong>
-                <span>{{ monitoring_info.uptime }}</span>
+                <span id="uptime">{{ monitoring_info.uptime }}</span>
               </div>
-              <!-- NVMe Option & Sensor Selection (only if show_nvme is enabled) -->
+              <!-- NVMe Sensor Selection (if enabled) -->
               <div class="col-md-3">
                 {% if config['show_nvme'] and monitoring_info.ssd_all %}
                   <form method="get" class="d-flex align-items-center flex-wrap">
@@ -714,15 +743,27 @@ def dir_listing(req_path):
                 {% endif %}
               </div>
             </div>
+            <!-- Row with CPU Frequency and Memory Usage Info -->
             <div class="row mb-3">
               <div class="col-md-4">
-                <div class="mb-1"><strong>CPU Usage:</strong></div>
+                <strong>CPU Frequency:</strong>
+                <span id="cpu-usage-text">{{ monitoring_info.cpu_freq_current }} MHz / {{ monitoring_info.cpu_freq_max }} MHz</span>
+              </div>
+              <div class="col-md-4">
+                <strong>Memory Usage:</strong>
+                <span id="memory-usage-text">{{ monitoring_info.mem_used | filesizeformat }} / {{ monitoring_info.mem_total | filesizeformat }}</span>
+              </div>
+              <div class="col-md-4"></div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <div class="mb-1"><strong>CPU Usage (Progress):</strong></div>
                 <div class="progress">
                   <div id="cpuBar" class="progress-bar" role="progressbar" style="width: {{ monitoring_info.cpu_usage }}%;" aria-valuenow="{{ monitoring_info.cpu_usage }}" aria-valuemin="0" aria-valuemax="100">{{ monitoring_info.cpu_usage }}%</div>
                 </div>
               </div>
               <div class="col-md-4">
-                <div class="mb-1"><strong>Memory Usage:</strong></div>
+                <div class="mb-1"><strong>Memory Usage (Progress):</strong></div>
                 <div class="progress">
                   <div id="memBar" class="progress-bar bg-success" role="progressbar" style="width: {{ monitoring_info.mem_percent }}%;" aria-valuenow="{{ monitoring_info.mem_percent }}" aria-valuemin="0" aria-valuemax="100">{{ monitoring_info.mem_percent }}%</div>
                 </div>
@@ -759,6 +800,7 @@ def dir_listing(req_path):
           </div>
           <div class="card-body">
             <div class="row">
+              <!-- Upload form -->
               <div class="col-md-6">
                 <form id="uploadForm" action="{{ url_for('upload_file', req_path=req_path) }}" method="post" enctype="multipart/form-data">
                   <div class="mb-3">
@@ -766,9 +808,12 @@ def dir_listing(req_path):
                   </div>
                   <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Upload</button>
                 </form>
+                <!-- Progress bar -->
                 <div id="uploadProgress" class="progress mt-2" style="display:none;">
                   <div id="uploadProgressBar" class="progress-bar" role="progressbar" style="width: 0%;">0%</div>
                 </div>
+                <!-- Upload speed display -->
+                <div id="uploadSpeed" class="text-center mt-2"></div>
               </div>
               <div class="col-md-6">
                 <form action="{{ url_for('create_folder', req_path=req_path) }}" method="post">
@@ -883,7 +928,7 @@ def dir_listing(req_path):
       </div>
       
       <script>
-        // Update monitoring progress bars using Bootstrap progress bars
+        // Update monitoring progress bars and additional texts
         function updateMonitoring() {
           let sensorSelect = document.getElementById("ssd_sensor_select");
           let sensorParam = "";
@@ -902,13 +947,17 @@ def dir_listing(req_path):
               let diskBar = document.getElementById("diskBar");
               diskBar.style.width = data.disk_percent + "%";
               diskBar.textContent = data.disk_percent + "%";
+              // Update CPU frequency text
+              document.getElementById("cpu-usage-text").textContent = data.cpu_freq_current + " MHz / " + data.cpu_freq_max + " MHz";
+              document.getElementById("memory-usage-text").textContent = data.mem_used_human + " / " + data.mem_total_human;
+              document.getElementById("uptime").textContent = data.uptime;
             })
             .catch(err => console.error("Error fetching /api/monitoring:", err));
         }
         document.addEventListener("DOMContentLoaded", function() {
           setInterval(updateMonitoring, {{ monitor_refresh * 1000 }});
         });
-        // Handle file upload with progress bar via AJAX
+        // Handle file upload with progress bar and display upload speed
         document.getElementById("uploadForm").addEventListener("submit", function(e) {
           e.preventDefault();
           var form = this;
@@ -916,11 +965,32 @@ def dir_listing(req_path):
           var xhr = new XMLHttpRequest();
           xhr.open("POST", form.action, true);
           document.getElementById("uploadProgress").style.display = "block";
+          var lastLoaded = 0;
+          var lastTime = Date.now();
           xhr.upload.addEventListener("progress", function(e) {
             if (e.lengthComputable) {
               var percentComplete = Math.round((e.loaded / e.total) * 100);
               document.getElementById("uploadProgressBar").style.width = percentComplete + "%";
               document.getElementById("uploadProgressBar").textContent = percentComplete + "%";
+              var currentTime = Date.now();
+              var deltaTime = (currentTime - lastTime) / 1000;
+              var deltaLoaded = e.loaded - lastLoaded;
+              if (deltaTime > 0) {
+                var speed = deltaLoaded / deltaTime; // speed in B/s
+                lastTime = currentTime;
+                lastLoaded = e.loaded;
+                var speedStr = "";
+                if (speed >= 1024 * 1024 * 1024) {
+                  speedStr = (speed / (1024 * 1024 * 1024)).toFixed(2) + " GB/s";
+                } else if (speed >= 1024 * 1024) {
+                  speedStr = (speed / (1024 * 1024)).toFixed(2) + " MB/s";
+                } else if (speed >= 1024) {
+                  speedStr = (speed / 1024).toFixed(2) + " KB/s";
+                } else {
+                  speedStr = speed.toFixed(2) + " B/s";
+                }
+                document.getElementById("uploadSpeed").textContent = "Upload speed: " + speedStr;
+              }
             }
           });
           xhr.onload = function() {
@@ -933,7 +1003,7 @@ def dir_listing(req_path):
           };
           xhr.send(formData);
         });
-        // Function to toggle "select all" checkboxes
+        // Toggle "select all" checkboxes
         function toggleSelectAll(source) {
           let checkboxes = document.querySelectorAll('input[name="selected_files"]');
           checkboxes.forEach(function(checkbox) {
