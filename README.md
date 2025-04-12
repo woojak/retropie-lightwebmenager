@@ -158,6 +158,34 @@ This script stops and disables the service, removes the systemd service file, an
   sudo systemctl status web_panel.service
   sudo journalctl -u web_panel.service
   ```
+- **No module named 'flask'**
+
+ 1. Verify Your Python Version
+First, check which version of Python is being used when you execute the script.
+Run:
+```
+python --version
+```
+or
+```
+python3 --version
+```
+Ensure that you know whether your script is meant for Python 2 or Python 3. 
+(Most modern scripts, especially on systems like RetroPie, usually use Python 3.)
+
+ 2. Install Flask Using pip
+If you’re using Python 3, use pip3 to install Flask.
+Open a terminal and run:
+```
+bash
+sudo pip3 install flask
+```
+For Python 2 (if ever needed), you would use:
+```
+bash
+sudo pip install flask
+```
+This command will download and install Flask and its dependencies so that the module becomes available for your script.
 
 - **File Upload Issues:**  
   Ensure that the temporary directory exists with proper permissions:
