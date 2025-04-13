@@ -1,32 +1,32 @@
-
 # RetroPie Light Web Game Manager
 
-This repository contains a full-featured web panel for managing your RetroPie file system, monitoring system performance, and controlling your Raspberry Pi. The web interface is built using Python and Flask and includes persistent configuration storage, system control options (such as reboot/shutdown), file management with bulk selection (including a "select all" feature), and a text-based SSH GUI for changing settings and managing the service.
+This repository contains a full-featured web panel for managing your RetroPie file system, monitoring system performance, and controlling your Raspberry Pi. The web interface is built using Python and Flask, featuring persistent configuration storage, system control options (such as reboot/shutdown), comprehensive file management with bulk selection (including a “select all” feature), and a text-based SSH GUI for managing settings and controlling the service.
 
 ## Repository Contents
 
 - **web_panel.py**  
   The main Python Flask application that provides:
-  - **File and directory management:**  
-    Browse directories, upload files (with a real-time progress bar), create folders, edit files, and delete files/folders. The file management section now includes bulk selection with a “select all” checkbox for managing multiple files at once.
-  - **System monitoring:**  
-    Displays live system statistics such as CPU temperature, CPU usage, memory usage, disk usage, and system uptime with visual progress bars.
-  - **NVMe sensor selection:**  
-    If enabled in the configuration, allows you to select an NVMe sensor and monitor its temperature. Your selection is saved persistently.
-  - **System control functions:**  
-    Reboot or shutdown your Raspberry Pi directly via the web interface.
-  - **Configuration management:**  
-    Edit application settings (admin credentials, secret key, port, monitoring refresh interval, and NVMe sensor display) via a dedicated settings page.
-  - **Editing RPI config.txt:**  
-    Provides an endpoint for modifying `/boot/firmware/config.txt`.
+  - **File and Directory Management:**  
+    Browse directories, upload files (with a real-time progress bar and dynamic upload speed display), create folders, edit files, and delete files/folders. The file management section now supports bulk selection via a “select all” checkbox for quickly managing multiple files at once.
+  - **System Monitoring:**  
+    Displays live system statistics, including CPU temperature, CPU frequency (current and maximum), memory usage, disk usage, and system uptime. Visual progress bars represent these metrics, with the CPU usage display now showing the current/max CPU frequency.
+  - **NVMe Sensor Selection:**  
+    If enabled in the configuration, you can choose an NVMe sensor from a dropdown menu to monitor its temperature. Your selection is saved persistently.
+  - **System Control Functions:**  
+    Reboot or shutdown your Raspberry Pi directly from the web interface without accidental re-triggering of the action upon page refresh.
+  - **Configuration Management:**  
+    Modify application settings—including admin credentials, secret key, port, monitoring refresh interval, NVMe sensor display, and the configuration file location for editing RPI config.txt—via a dedicated settings page. All changes are persistently saved in `config.cfg`.
+  - **Editing RPI Config.txt:**  
+    Provides an endpoint for modifying the Raspberry Pi configuration file. You can now choose between editing `/boot/firmware/config.txt` (for 64-bit systems) or `/boot/config.txt` (for 32-bit systems) based on the selection stored in the configuration file.
 
 - **config.cfg**  
   A configuration file that stores persistent settings, including:
-  - Admin credentials like login: admin and password: admin (recomendet to change)
-  - Secret key (recomendet to change)
+  - Admin credentials (default: login: admin and password: mawerik1 — recommended to change)
+  - Secret key (recommended to change)
   - Port number
-  - Monitoring refresh interval
-  - NVMe sensor selection and display setting if mvme is present.
+  - Monitoring refresh interval (with a minimum of 0.5 seconds)
+  - NVMe sensor selection and display status (if an NVMe device is present)
+  - The config file location selection for editing the RPI configuration (choosing between the 64-bit system `/boot/firmware/config.txt` or the 32-bit system `/boot/config.txt`)
 
 - **web_panel.service**  
   A systemd service file that runs the Flask application on startup.
@@ -34,7 +34,7 @@ This repository contains a full-featured web panel for managing your RetroPie fi
 - **install.sh**  
   An installation script that automates:
   - Updating packages and installing dependencies.
-  - Creating a temporary directory with the correct permissions.
+  - Creating the temporary directory with proper permissions.
   - Cloning (or updating) the repository.
   - Setting executable permissions for project files.
   - Installing the systemd service, enabling it to start at boot, and starting the service immediately.
@@ -43,11 +43,11 @@ This repository contains a full-featured web panel for managing your RetroPie fi
   An uninstallation script that stops and disables the web panel service and optionally deletes the repository folder.
 
 - **gui_web_panel.sh**  
-  A text-based graphical (TUI) script (using whiptail) for managing settings and service control via SSH. It offers submenus for:
-  - Configuring credentials (login & password)
-  - Configuring app settings (secret key, port, and monitoring refresh interval)
-  - Managing the service (restart, enable,stop, disable)
-  - Running the install or uninstall scripts
+  A text-based graphical (TUI) script (using whiptail) for managing settings and controlling the service via SSH. It offers submenus for:
+  - Configuring credentials (displaying current values).
+  - Configuring app settings (secret key, port, monitoring refresh interval, and config file location).
+  - Managing the service (restart, enable, stop, disable).
+  - Running the install or uninstall scripts.
 
 ## Prerequisites
 
@@ -82,7 +82,7 @@ This script will:
 - Clone (or update) the repository.
 - Set executable permissions for all project files.
 - Copy `web_panel.service` to `/etc/systemd/system/`.
-- Reload systemd, enable the service for auto-start at boot, and start the service immediately.
+- Reload systemd, enable the service to start at boot, and start it immediately.
 
 ### 3. Verify the Service
 
@@ -94,29 +94,31 @@ If issues occur, review logs with:
 ```bash
 sudo journalctl -u web_panel.service
 ```
+
 ---
 
 ## Usage and Operation
 
 ### Web Interface
 
+![Screenshot](https://raw.githubusercontent.com/woojak/retropie_lwgmenager/refs/heads/main/images/Main.png)
 
-![Screen shoot](https://raw.githubusercontent.com/woojak/retropie_lwgmenager/refs/heads/main/images/Main.png)
-
-
-Access the web panel (user: admin password: admin) by navigating to your Raspberry Pi’s IP address and the configured port (default is 5000) in your browser. The web interface includes:
+Access the web panel (default credentials: user: admin, password: mawerik1) by navigating to your Raspberry Pi’s IP address and the configured port (default is 5000) in your browser. The web interface includes:
 
 - **Monitoring Section:**  
-  Displays live system statistics including CPU temperature, CPU usage, memory usage, disk usage, and system uptime using progress bars. If NVMe monitoring is enabled, a dropdown menu allows you to select the sensor, and your selection is saved.
+  Displays live system statistics such as CPU temperature, CPU frequency (in MHz), memory usage, disk usage, and system uptime with progress bars. If NVMe monitoring is enabled, a dropdown menu allows you to select the sensor, and your selection is saved persistently.
 
 - **Control Section:**  
-  Provides buttons to reboot or shutdown your Raspberry Pi directly from the interface.
+  Provides buttons to reboot or shut down your Raspberry Pi directly from the interface, with the application redirecting to the main page to prevent accidental repeated actions.
 
 - **File Management:**  
-  Browse directories, upload files with a real-time progress bar, create folders, edit files, and delete files or folders. The updated file management interface supports bulk selection via a "select all" checkbox for quicker operations.
+  Browse directories, upload files (with a real-time progress bar and dynamic upload speed display), create folders, edit files, and delete files or folders. The updated interface supports bulk selection through a “select all” checkbox for faster operations.
 
 - **Configuration:**  
-  Modify admin credentials and app settings, such as the secret key, port, and monitoring refresh interval. All changes are saved in `config.cfg` and persist across sessions.
+  Modify admin credentials and application settings, such as the secret key, port, monitoring refresh interval, NVMe sensor display, and the Raspberry Pi configuration file location (64-bit vs. 32-bit systems). All changes are saved in `config.cfg` and persist across sessions.
+
+- **Editing RPI config.txt:**  
+  Provides an endpoint for editing the Raspberry Pi configuration file. You can choose between `/boot/firmware/config.txt` for 64-bit systems or `/boot/config.txt` for 32-bit systems as per the selected option in the configuration.
 
 ### SSH GUI
 
@@ -126,9 +128,9 @@ sudo /home/pi/retropie_lwgmenager/gui_web_panel.sh
 ```
 This TUI offers menus for:
 - Configuring credentials (displaying current values).
-- Configuring app settings (secret key, port, and monitoring refresh interval).
-- Managing the service by restarting, enabling, or disabling it.
-- Running the install or uninstall scripts.
+- Configuring app settings (secret key, port, monitoring refresh interval, and config file location).
+- Managing the service by restarting, enabling, stopping, or disabling it.
+- Running the installation or uninstallation scripts.
 
 ## Customization
 
@@ -139,7 +141,7 @@ This TUI offers menus for:
   The refresh interval for system metrics is configurable (minimum 0.5 seconds).
 
 - **Service Control:**  
-  The web panel provides controls to restart, enable, stop or disable the service through both the web interface and the SSH GUI.
+  The web panel provides controls to restart, enable, stop, or disable the service through both the web interface and the SSH GUI.
 
 ## Uninstallation
 
@@ -158,34 +160,20 @@ This script stops and disables the service, removes the systemd service file, an
   sudo systemctl status web_panel.service
   sudo journalctl -u web_panel.service
   ```
-- **No module named 'flask'**
+- **Module Not Found ('flask'):**
 
- 1. Verify Your Python Version
-First, check which version of Python is being used when you execute the script.
-Run:
-```
-python --version
-```
-or
-```
-python3 --version
-```
-Ensure that you know whether your script is meant for Python 2 or Python 3. 
-(Most modern scripts, especially on systems like RetroPie, usually use Python 3.)
+  1. Verify your Python version:
+     ```bash
+     python --version
+     python3 --version
+     ```
+     Ensure that you know whether your script is meant for Python 2 or Python 3 (most modern systems use Python 3).
 
- 2. Install Flask Using pip
-If you’re using Python 3, use pip3 to install Flask.
-Open a terminal and run:
-```
-bash
-sudo pip3 install flask
-```
-For Python 2 (if ever needed), you would use:
-```
-bash
-sudo pip install flask
-```
-This command will download and install Flask and its dependencies so that the module becomes available for your script.
+  2. Install Flask using pip:
+     ```bash
+     sudo pip3 install flask
+     ```
+     (If you need Python 2, use `sudo pip install flask`.)
 
 - **File Upload Issues:**  
   Ensure that the temporary directory exists with proper permissions:
@@ -197,10 +185,6 @@ This command will download and install Flask and its dependencies so that the mo
 
 Contributions, issues, and feature requests are welcome! Please open an issue or submit a pull request.
 
-
-
-
+---
 
 Enjoy using the RetroPie Light Web Game Manager to efficiently manage your RetroPie setup!
-
-
