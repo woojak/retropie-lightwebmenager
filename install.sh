@@ -15,8 +15,8 @@ fi
 echo "Updating package lists..."
 sudo apt-get update
 
-echo "Installing required packages: git, python3, python3-pip, and whiptail..."
-sudo apt-get install -y git python3 python3-pip whiptail
+echo "Installing required packages: git, python3, python3-pip, and whiptail, python3-flask, python3-psutil ..."
+sudo apt-get install -y git python3 python3-pip whiptail python3-psutil python3-flask
 
 # Create temporary directory and set permissions
 TEMP_DIR="/home/pi/tmp"
