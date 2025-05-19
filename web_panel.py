@@ -19,7 +19,7 @@ CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.c
 def load_config():
     config = {
         "login": "admin",
-        "password": "mawerik1",
+        "password": "admin",
         "secret_key": "your_secret_key",
         "port": 5000,
         "monitor_refresh": 0.5,
