@@ -484,7 +484,7 @@ def dir_listing(req_path):
   .progress { height: 35px; }
   .progress-bar { color: black; font-size: 1.2em; font-weight: bold; }
 
-  /* ─── Upload‐specific styles ─── */
+  /* ─── Upload specific styles ─── */
 
   /* Container for upload progress */
   #uploadProgress {
